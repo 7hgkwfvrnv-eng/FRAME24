@@ -378,12 +378,30 @@
 
   function startPlayback() {
     if (!currentVideoId) return;
+    // Visa omedelbar visuell feedback så det inte ser ut som att inget händer
+    // medan YouTube-spelaren laddar (den svarta laddningsskärmen ser annars
+    // identisk ut som vår "tryck här"-ruta).
+    document.getElementById('start-icon').textContent = '⏳';
+    document.getElementById('start-text').textContent = 'Laddar...';
+    document.getElementById('start-overlay').style.pointerEvents = 'none';
+
     const src = `https://www.youtube.com/embed/${currentVideoId}?autoplay=1&controls=1&modestbranding=1&rel=0&iv_load_policy=3&fs=1&playsinline=1`;
-    document.getElementById('yt-iframe').src = src;
-    document.getElementById('start-overlay').style.display = 'none';
-    if (document.getElementById('audioOnlyToggle').checked) {
-      document.getElementById('audio-overlay').style.display = 'flex';
-    }
+    const iframe = document.getElementById('yt-iframe');
+    iframe.src = src;
+
+    const hideOverlay = () => {
+      document.getElementById('start-overlay').style.display = 'none';
+      document.getElementById('start-overlay').style.pointerEvents = 'auto';
+      document.getElementById('start-icon').textContent = '▶';
+      document.getElementById('start-text').textContent = 'Tryck för att starta klippet';
+      if (document.getElementById('audioOnlyToggle').checked) {
+        document.getElementById('audio-overlay').style.display = 'flex';
+      }
+    };
+
+    iframe.onload = hideOverlay;
+    // Fallback ifall onload-eventet inte triggas som förväntat i inbäddade iframes
+    setTimeout(hideOverlay, 1800);
   }
 
   function toggleOverlay() {
