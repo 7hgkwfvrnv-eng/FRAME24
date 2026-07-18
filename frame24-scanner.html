@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Frame24</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jsqr/1.4.0/jsQR.js"></script>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body {
+    height: 100%;
+    background: #0a0a0a;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    color: #eee;
+    overscroll-behavior: none;
+  }
+  #wrap {
+    min-height: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+  }
+  #logo {
+    font-size: 15px;
+    letter-spacing: 6px;
+    color: #c9a44c;
+    font-weight: 700;
+    margin-bottom: 24px;
+    text-transform: uppercase;
+  }
+  #logo span { color: #666; font-weight: 400; letter-spacing: 3px; }
+
+  /* Scanner view */
+  #scan-box {
+    width: 100%;
+    max-width: 480px;
+    aspect-ratio: 1;
+    background: #000;
+    border-radius: 12px;
+    border: 1px solid #2a2a2a;
+    position: relative;
+    overflow: hidden;
+  }
+  #scan-video { width: 100%; height: 100%; object-fit: cover; }
+  #scan-frame {
+    position: absolute;
+    top: 15%; left: 15%; right: 15%; bottom: 15%;
+    border: 2px solid #c9a44c;
+    border-radius: 12px;
+    pointer-events: none;
+    box-shadow: 0 0 0 2000px rgba(0,0,0,0.35);
+  }
+  #scan-hint {
+    position: absolute;
+    bottom: 14px; left: 0; right: 0;
+    text-align: center;
+    font-size: 13px;
+    color: #ddd;
+    text-shadow: 0 1px 3px #000;
+  }
+
+  /* Player view */
+  #player-box {
+    width: 100%;
+    max-width: 900px;
+    aspect-ratio: 16/9;
+    background: #000;
+    border: 1px solid #2a2a2a;
+    display: none;
+    position: relative;
+  }
+  #audio-overlay {
+    position: absolute;
+    inset: 0;
+    background: #0a0a0a;
+    display: none;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    pointer-events: none;
+  }
+  #audio-overlay-icon {
+    font-size: 48px;
+    color: #c9a44c;
+    margin-bottom: 10px;
+  }
+  #audio-overlay-text {
+    font-size: 13px;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: #888;
+  }
+  #mode-row { margin-top: 14px; }
+  .switch {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+    color: #aaa;
+    cursor: pointer;
+    user-select: none;
+  }
+  .switch input { accent-color: #c9a44c; width: 16px; height: 16px; cursor: pointer; }
+
+  button, .btn {
+    padding: 11px 22px;
+    border-radius: 5px;
+    border: 1px solid #c9a44c;
+    background: transparent;
+    color: #c9a44c;
+    font-weight: 600;
+    letter-spacing: 1px;
+    cursor: pointer;
+    font-size: 13px;
+    margin-top: 16px;
+    text-transform: uppercase;
+    transition: all 0.15s;
+  }
+  button:hover, .btn:hover { background: #c9a44c; color: #0a0a0a; }
+
+  #manual-toggle {
+    margin-top: 18px;
+    font-size: 12px;
+    color: #777;
+    text-decoration: underline;
+    cursor: pointer;
+  }
+  #manual-box { display:none; margin-top: 14px; text-align: center; }
+  #manual-box input {
+    width: 260px;
+    padding: 9px 12px;
+    border-radius: 5px;
+    border: 1px solid #333;
+    background: #151515;
+    color: #eee;
+    font-size: 13px;
+    margin-bottom: 8px;
+  }
+  #status {
+    font-size: 12px;
+    color: #888;
+    margin-top: 14px;
+    max-width: 340px;
+    text-align: center;
+    line-height: 1.5;
+  }
+  #title-reveal {
+    margin-top: 16px;
+    font-size: 17px;
+    font-weight: 600;
+    color: #c9a44c;
+    text-align: center;
+  }
+</style>
+</head>
+<body>
+<div id="wrap">
+
+  <div id="logo">FRAME<span>24</span></div>
+
+  <!-- Scanner -->
+  <div id="scan-view">
+    <div id="scan-box">
+      <video id="scan-video" playsinline autoplay muted></video>
+      <div id="scan-frame"></div>
+      <div id="scan-hint">Rikta mot kortets QR-kod</div>
+    </div>
+    <div id="status">Startar kameran...</div>
+    <button id="retry-btn" style="display:none;" onclick="scanNext()">Försök igen</button>
+  </div>
+
+  <!-- Player -->
+  <div id="player-box">
+    <iframe id="yt-iframe" width="100%" height="100%" src=""
+      frameborder="0"
+      allow="autoplay; encrypted-media; fullscreen"
+      allowfullscreen>
+    </iframe>
+    <div id="audio-overlay">
+      <div id="audio-overlay-icon">♪</div>
+      <div id="audio-overlay-text">Endast ljud — gissa filmen</div>
+    </div>
+  </div>
+
+  <div id="mode-row">
+    <label class="switch">
+      <input type="checkbox" id="audioOnlyToggle" onchange="toggleOverlay()">
+      <span>Bara ljud (dölj bild)</span>
+    </label>
+  </div>
+
+  <div id="title-reveal"></div>
+  <button id="next-btn" style="display:none;" onclick="scanNext()">Nästa kort</button>
+
+</div>
+
+<canvas id="canvas" style="display:none;"></canvas>
+
+<script>
+  let stream = null;
+  let scanning = false;
+  const video = document.getElementById('scan-video');
+  const canvas = document.getElementById('canvas');
+  const ctx = canvas.getContext('2d', { willReadFrequently: true });
+
+  function extractId(input) {
+    input = input.trim();
+    const patterns = [
+      /(?:youtu\.be\/)([a-zA-Z0-9_-]{11})/,
+      /(?:v=)([a-zA-Z0-9_-]{11})/,
+      /(?:embed\/)([a-zA-Z0-9_-]{11})/
+    ];
+    for (const p of patterns) {
+      const m = input.match(p);
+      if (m) return m[1];
+    }
+    if (/^[a-zA-Z0-9_-]{11}$/.test(input)) return input;
+    return null;
+  }
+
+  async function startCamera() {
+    const statusEl = document.getElementById('status');
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: 'environment' }
+      });
+      video.srcObject = stream;
+      await video.play();
+      statusEl.textContent = '';
+      scanning = true;
+      requestAnimationFrame(tick);
+    } catch (err) {
+      statusEl.textContent = 'Kunde inte starta kameran (' + err.message + '). Kontrollera att sidan har kamerabehörighet och körs över HTTPS.';
+      document.getElementById('retry-btn').style.display = 'inline-block';
+    }
+  }
+
+  function tick() {
+    if (!scanning) return;
+
+    if (video.readyState === video.HAVE_ENOUGH_DATA) {
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      const code = jsQR(imageData.data, imageData.width, imageData.height, {
+        inversionAttempts: 'dontInvert'
+      });
+
+      if (code && code.data) {
+        const id = extractId(code.data);
+        if (id) {
+          handleScan(id);
+          return;
+        }
+      }
+    }
+    requestAnimationFrame(tick);
+  }
+
+  function handleScan(id) {
+    scanning = false;
+    stopCamera();
+    playVideo(id);
+  }
+
+  function stopCamera() {
+    if (stream) {
+      stream.getTracks().forEach(t => t.stop());
+      stream = null;
+    }
+  }
+
+  function playVideo(id) {
+    const src = `https://www.youtube.com/embed/${id}?autoplay=1&controls=1&modestbranding=1&rel=0&iv_load_policy=3&fs=1&playsinline=1`;
+    document.getElementById('yt-iframe').src = src;
+    document.getElementById('scan-view').style.display = 'none';
+    document.getElementById('player-box').style.display = 'block';
+    document.getElementById('title-reveal').textContent = 'Gissa året — vänd sen på kortet för facit';
+    document.getElementById('next-btn').style.display = 'inline-block';
+  }
+
+  function toggleOverlay() {
+    const checked = document.getElementById('audioOnlyToggle').checked;
+    document.getElementById('audio-overlay').style.display = checked ? 'flex' : 'none';
+  }
+
+  function scanNext() {
+    document.getElementById('yt-iframe').src = '';
+    document.getElementById('player-box').style.display = 'none';
+    document.getElementById('title-reveal').textContent = '';
+    document.getElementById('next-btn').style.display = 'none';
+    document.getElementById('scan-view').style.display = 'block';
+    document.getElementById('status').textContent = 'Startar kameran...';
+    startCamera();
+  }
+
+  window.addEventListener('DOMContentLoaded', () => {
+    // Auto-load via ?id= for testing without camera
+    const params = new URLSearchParams(window.location.search);
+    const idParam = params.get('id');
+    if (idParam) {
+      playVideo(extractId(idParam) || idParam);
+    } else {
+      startCamera();
+    }
+  });
+
+  window.addEventListener('beforeunload', stopCamera);
+</script>
+
+</body>
+</html>
