@@ -207,10 +207,37 @@
 
   function extractId(input) {
     input = input.trim();
+
+    // Försök tolka som fullständig URL först (hanterar querystring-ordning,
+    // shorts, mobil-URL:er, extra spårningsparametrar etc.)
+    try {
+      const url = new URL(input);
+      const host = url.hostname.replace(/^www\./, '').replace(/^m\./, '');
+
+      if (host === 'youtu.be') {
+        const id = url.pathname.split('/').filter(Boolean)[0];
+        if (id && id.length === 11) return id;
+      }
+
+      if (host === 'youtube.com' || host === 'music.youtube.com') {
+        const vParam = url.searchParams.get('v');
+        if (vParam && vParam.length === 11) return vParam;
+
+        const parts = url.pathname.split('/').filter(Boolean);
+        // /shorts/ID eller /embed/ID
+        if ((parts[0] === 'shorts' || parts[0] === 'embed' || parts[0] === 'live') && parts[1]) {
+          return parts[1].slice(0, 11);
+        }
+      }
+    } catch (e) {
+      // Inte en giltig URL, fortsätt till regex-fallback nedan
+    }
+
+    // Regex-fallback för YouTube-mönster inbäddade i annan text
     const patterns = [
       /(?:youtu\.be\/)([a-zA-Z0-9_-]{11})/,
-      /(?:v=)([a-zA-Z0-9_-]{11})/,
-      /(?:embed\/)([a-zA-Z0-9_-]{11})/
+      /(?:[?&]v=)([a-zA-Z0-9_-]{11})/,
+      /(?:embed\/|shorts\/|live\/)([a-zA-Z0-9_-]{11})/
     ];
     for (const p of patterns) {
       const m = input.match(p);
@@ -218,6 +245,15 @@
     }
     if (/^[a-zA-Z0-9_-]{11}$/.test(input)) return input;
     return null;
+  }
+
+  function isLikelyUrl(input) {
+    try {
+      const url = new URL(input.trim());
+      return url.protocol === 'http:' || url.protocol === 'https:';
+    } catch (e) {
+      return false;
+    }
   }
 
   async function startCamera() {
@@ -262,6 +298,12 @@
           const id = extractId(code.data);
           if (id) {
             handleScan(id);
+            return;
+          } else if (isLikelyUrl(code.data)) {
+            document.getElementById('status').textContent = 'Kände inte igen som YouTube-länk, öppnar direkt: ' + code.data;
+            scanning = false;
+            stopCamera();
+            window.open(code.data, '_blank');
             return;
           } else {
             document.getElementById('status').textContent = 'Kod hittad men kunde inte tolkas: ' + code.data;
