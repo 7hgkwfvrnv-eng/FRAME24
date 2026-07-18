@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Frame24</title>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jsqr/1.4.0/jsQR.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
   html, body {
@@ -224,7 +224,11 @@
     const statusEl = document.getElementById('status');
     try {
       stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: 'environment' }
+        video: {
+          facingMode: 'environment',
+          width: { ideal: 1920 },
+          height: { ideal: 1920 }
+        }
       });
       video.srcObject = stream;
       await video.play();
@@ -241,20 +245,30 @@
     if (!scanning) return;
 
     if (video.readyState === video.HAVE_ENOUGH_DATA) {
-      canvas.width = video.videoWidth;
-      canvas.height = video.videoHeight;
-      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-      const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-      const code = jsQR(imageData.data, imageData.width, imageData.height, {
-        inversionAttempts: 'dontInvert'
-      });
-
-      if (code && code.data) {
-        const id = extractId(code.data);
-        if (id) {
-          handleScan(id);
+      try {
+        if (typeof jsQR !== 'function') {
+          document.getElementById('status').textContent = 'QR-läsarbiblioteket laddades inte. Kolla internetanslutningen och ladda om sidan.';
           return;
         }
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        const code = jsQR(imageData.data, imageData.width, imageData.height, {
+          inversionAttempts: 'attemptBoth'
+        });
+
+        if (code && code.data) {
+          const id = extractId(code.data);
+          if (id) {
+            handleScan(id);
+            return;
+          } else {
+            document.getElementById('status').textContent = 'Kod hittad men kunde inte tolkas: ' + code.data;
+          }
+        }
+      } catch (e) {
+        document.getElementById('status').textContent = 'Fel vid avläsning: ' + e.message;
       }
     }
     requestAnimationFrame(tick);
