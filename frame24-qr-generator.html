@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Frame24 — QR-generator (admin)</title>
+<script>
+  function loadFallbackQR() {
+    const s = document.createElement('script');
+    s.src = 'https://unpkg.com/qrcode@1.5.4/build/qrcode.min.js';
+    document.head.appendChild(s);
+  }
+</script>
+<script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.4/build/qrcode.min.js" onerror="loadFallbackQR()"></script>
+<script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    background: #0a0a0a;
+    color: #eee;
+    padding: 32px 20px;
+  }
+  #app { max-width: 700px; margin: 0 auto; }
+  h1 { font-size: 18px; color: #c9a44c; letter-spacing: 2px; margin-bottom: 4px; }
+  .sub { color: #777; font-size: 12px; margin-bottom: 24px; }
+  .box {
+    background: #141414;
+    border: 1px solid #2a2a2a;
+    border-radius: 8px;
+    padding: 20px;
+    margin-bottom: 20px;
+  }
+  label { display: block; font-size: 12px; color: #aaa; margin-bottom: 6px; }
+  textarea, input {
+    width: 100%;
+    padding: 10px 12px;
+    border-radius: 5px;
+    border: 1px solid #333;
+    background: #0a0a0a;
+    color: #eee;
+    font-size: 13px;
+    font-family: monospace;
+    margin-bottom: 12px;
+  }
+  textarea { min-height: 160px; resize: vertical; }
+  button {
+    padding: 10px 20px;
+    border-radius: 5px;
+    border: 1px solid #c9a44c;
+    background: transparent;
+    color: #c9a44c;
+    font-weight: 600;
+    letter-spacing: 1px;
+    cursor: pointer;
+    font-size: 13px;
+    text-transform: uppercase;
+  }
+  button:hover { background: #c9a44c; color: #0a0a0a; }
+  button:disabled { opacity: 0.4; cursor: not-allowed; }
+  #status { font-size: 12px; color: #888; margin-top: 10px; }
+  .steps { font-size: 12px; color: #888; line-height: 1.6; margin-bottom: 14px; }
+  #grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+    gap: 14px;
+    margin-top: 20px;
+  }
+  .card {
+    background: #0a0a0a;
+    border: 1px solid #2a2a2a;
+    border-radius: 6px;
+    padding: 10px;
+    text-align: center;
+  }
+  .card canvas { width: 100%; border-radius: 4px; }
+  .card .name { font-size: 10px; color: #999; margin-top: 6px; word-break: break-word; }
+</style>
+</head>
+<body>
+<div id="app">
+  <h1>FRAME24 — QR-GENERATOR</h1>
+  <div class="sub">Produktionsverktyg — bara för dig, inte för spelarna</div>
+
+  <div class="box">
+    <label>Filmlista (en rad per film: <code>filnamn,video-ID eller YouTube-länk</code>)</label>
+    <textarea id="listInput" placeholder="pulp_fiction,dQw4w9WgXcQ&#10;jaws,2YHjoICvTww&#10;..."></textarea>
+    <div class="steps">
+      Ett filnamn per rad (utan mellanslag, gärna filmens titel med understreck), kommatecken, sen video-ID eller full YouTube-länk.
+      Klistra gärna in direkt från din CSV — bara se till att formatet är <code>namn,id</code> per rad.
+    </div>
+    <button id="genBtn" onclick="generateAll()">Generera alla QR-koder</button>
+    <div id="status"></div>
+  </div>
+
+  <div class="box" id="resultBox" style="display:none;">
+    <button onclick="downloadAllZip()">Ladda ner alla som ZIP</button>
+    <div id="grid"></div>
+  </div>
+</div>
+
+<script>
+  function extractId(input) {
+    input = input.trim();
+    try {
+      const url = new URL(input);
+      const host = url.hostname.replace(/^www\./, '').replace(/^m\./, '');
+      if (host === 'youtu.be') {
+        const id = url.pathname.split('/').filter(Boolean)[0];
+        if (id && id.length === 11) return id;
+      }
+      if (host === 'youtube.com' || host === 'music.youtube.com') {
+        const vParam = url.searchParams.get('v');
+        if (vParam && vParam.length === 11) return vParam;
+        const parts = url.pathname.split('/').filter(Boolean);
+        if ((parts[0] === 'shorts' || parts[0] === 'embed' || parts[0] === 'live') && parts[1]) {
+          return parts[1].slice(0, 11);
+        }
+      }
+    } catch (e) {}
+    const patterns = [
+      /(?:youtu\.be\/)([a-zA-Z0-9_-]{11})/,
+      /(?:[?&]v=)([a-zA-Z0-9_-]{11})/,
+      /(?:embed\/|shorts\/|live\/)([a-zA-Z0-9_-]{11})/
+    ];
+    for (const p of patterns) {
+      const m = input.match(p);
+      if (m) return m[1];
+    }
+    if (/^[a-zA-Z0-9_-]{11}$/.test(input)) return input;
+    return null;
+  }
+
+  let generated = [];
+
+  async function generateAll() {
+    const raw = document.getElementById('listInput').value;
+    const lines = raw.split('\n').map(l => l.trim()).filter(Boolean);
+    const statusEl = document.getElementById('status');
+    const grid = document.getElementById('grid');
+    grid.innerHTML = '';
+    generated = [];
+
+    if (lines.length === 0) {
+      statusEl.textContent = 'Klistra in minst en rad först.';
+      return;
+    }
+
+    if (typeof QRCode === 'undefined') {
+      statusEl.textContent = 'QR-biblioteket laddades inte (kolla internetanslutningen och ladda om sidan).';
+      return;
+    }
+
+    statusEl.textContent = 'Genererar...';
+    let ok = 0, failed = [];
+
+    try {
+      for (const line of lines) {
+        const parts = line.split(',');
+        if (parts.length < 2) { failed.push(line); continue; }
+        const name = parts[0].trim();
+        const rawId = parts.slice(1).join(',').trim();
+        const id = extractId(rawId);
+        if (!id) { failed.push(line); continue; }
+
+        const url = 'https://www.youtube.com/watch?v=' + id;
+        const canvas = document.createElement('canvas');
+
+        await new Promise((resolve) => {
+          QRCode.toCanvas(canvas, url, { width: 400, margin: 2 }, function (error) {
+            if (!error) {
+              const card = document.createElement('div');
+              card.className = 'card';
+              const displayCanvas = document.createElement('canvas');
+              displayCanvas.width = 400;
+              displayCanvas.height = 400;
+              displayCanvas.getContext('2d').drawImage(canvas, 0, 0);
+              card.appendChild(displayCanvas);
+              const label = document.createElement('div');
+              label.className = 'name';
+              label.textContent = name;
+              card.appendChild(label);
+              grid.appendChild(card);
+
+              generated.push({ name: name, dataUrl: canvas.toDataURL('image/png') });
+              ok++;
+            } else {
+              failed.push(line);
+            }
+            resolve();
+          });
+        });
+      }
+    } catch (e) {
+      statusEl.textContent = 'Fel under generering: ' + e.message;
+      return;
+    }
+
+    statusEl.textContent = `Klart: ${ok} QR-koder genererade.` + (failed.length ? ` ${failed.length} rader kunde inte tolkas: ${failed.join(' | ')}` : '');
+    document.getElementById('resultBox').style.display = generated.length ? 'block' : 'none';
+  }
+
+  async function downloadAllZip() {
+    if (!generated.length) return;
+    const zip = new JSZip();
+    generated.forEach(item => {
+      const base64 = item.dataUrl.split(',')[1];
+      zip.file(item.name + '.png', base64, { base64: true });
+    });
+    const blob = await zip.generateAsync({ type: 'blob' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'frame24-qr-koder.zip';
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+</script>
+</body>
+</html>
