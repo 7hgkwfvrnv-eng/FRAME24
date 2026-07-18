@@ -92,7 +92,27 @@
     text-transform: uppercase;
     color: #888;
   }
-  #mode-row { margin-top: 14px; }
+  #unmute-overlay {
+    position: absolute;
+    inset: 0;
+    background: rgba(0,0,0,0.55);
+    display: none;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+  }
+  #unmute-icon { font-size: 40px; margin-bottom: 8px; }
+  #unmute-text {
+    font-size: 13px;
+    letter-spacing: 1px;
+    color: #efe9dc;
+    background: #c9a44c;
+    color: #0a0a0a;
+    padding: 8px 18px;
+    border-radius: 20px;
+    font-weight: 700;
+  }
   .switch {
     display: flex;
     align-items: center;
@@ -181,6 +201,10 @@
     <div id="audio-overlay">
       <div id="audio-overlay-icon">♪</div>
       <div id="audio-overlay-text">Endast ljud — gissa filmen</div>
+    </div>
+    <div id="unmute-overlay" onclick="unmuteVideo()">
+      <div id="unmute-icon">🔊</div>
+      <div id="unmute-text">Tryck för ljud</div>
     </div>
   </div>
 
@@ -334,13 +358,24 @@
     }
   }
 
+  let currentVideoId = null;
+
   function playVideo(id) {
-    const src = `https://www.youtube.com/embed/${id}?autoplay=1&controls=1&modestbranding=1&rel=0&iv_load_policy=3&fs=1&playsinline=1`;
+    currentVideoId = id;
+    const src = `https://www.youtube.com/embed/${id}?autoplay=1&mute=1&controls=1&modestbranding=1&rel=0&iv_load_policy=3&fs=1&playsinline=1`;
     document.getElementById('yt-iframe').src = src;
     document.getElementById('scan-view').style.display = 'none';
     document.getElementById('player-box').style.display = 'block';
     document.getElementById('title-reveal').textContent = 'Gissa året — vänd sen på kortet för facit';
     document.getElementById('next-btn').style.display = 'inline-block';
+    document.getElementById('unmute-overlay').style.display = 'flex';
+  }
+
+  function unmuteVideo() {
+    if (!currentVideoId) return;
+    const src = `https://www.youtube.com/embed/${currentVideoId}?autoplay=1&mute=0&controls=1&modestbranding=1&rel=0&iv_load_policy=3&fs=1&playsinline=1`;
+    document.getElementById('yt-iframe').src = src;
+    document.getElementById('unmute-overlay').style.display = 'none';
   }
 
   function toggleOverlay() {
@@ -353,6 +388,8 @@
     document.getElementById('player-box').style.display = 'none';
     document.getElementById('title-reveal').textContent = '';
     document.getElementById('next-btn').style.display = 'none';
+    document.getElementById('unmute-overlay').style.display = 'none';
+    currentVideoId = null;
     document.getElementById('scan-view').style.display = 'block';
     document.getElementById('status').textContent = 'Startar kameran...';
     startCamera();
