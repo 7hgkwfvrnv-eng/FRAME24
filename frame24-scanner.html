@@ -300,10 +300,10 @@
             handleScan(id);
             return;
           } else if (isLikelyUrl(code.data)) {
-            document.getElementById('status').textContent = 'Kände inte igen som YouTube-länk, öppnar direkt: ' + code.data;
+            document.getElementById('status').textContent = 'Kände inte igen som YouTube-länk, öppnar: ' + code.data;
             scanning = false;
             stopCamera();
-            window.open(code.data, '_blank');
+            window.location.href = code.data;
             return;
           } else {
             document.getElementById('status').textContent = 'Kod hittad men kunde inte tolkas: ' + code.data;
