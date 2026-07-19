@@ -690,7 +690,7 @@
       <div id="buffer-spinner"></div>
       <div id="buffer-text">Laddar trailer …</div>
     </div>
-    <div id="sound-pill" onclick="forceUnmute()">🔇 Tryck för ljud</div>
+    <div id="sound-pill" onclick="forceUnmute()">▶ Tryck för att spela</div>
     <div id="audio-overlay">
       <div id="audio-overlay-icon">♪</div>
       <div id="audio-overlay-text">Endast ljud — gissa filmen</div>
@@ -902,7 +902,7 @@
 
     const playerVars = {
       autoplay: 1,
-      mute: 1,
+      mute: 0,
       controls: 0,
       modestbranding: 1,
       rel: 0,
@@ -915,27 +915,29 @@
     if (end) playerVars.end = end;
 
     if (ytPlayer) {
-      // Återanvänd samma spelarinstans — snabbare, undviker dubbletter, och
-      // avgörande för ljudet: samma <video>-element som webbläsaren redan
-      // godkänt för uppspelning tidigare under kvällen får fortsätta göra det.
+      // Återanvänd samma spelarinstans — samma <video>-element som
+      // webbläsaren redan godkänt för ljuduppspelning tidigare i sessionen
+      // (tack vare "Starta spelkvällen"-tryckningen) får fortsätta göra det.
+      // Vi muterar INTE här — att avmuta i efterhand utan en äkta klickning
+      // är precis det Chrome pausar videon för att förhindra.
       const loadOpts = { videoId: id };
       if (start) loadOpts.startSeconds = start;
       if (end) loadOpts.endSeconds = end;
       ytPlayer.loadVideoById(loadOpts);
-      ytPlayer.mute();
       ytPlayer.playVideo();
+      scheduleAutoplayFallbackCheck();
     } else if (ytApiReady && typeof YT !== 'undefined') {
       ytPlayer = new YT.Player('yt-player', {
         videoId: id,
         playerVars: playerVars,
         events: {
           onReady: function (event) {
-            // Garanterar att den tysta autoplay-uppspelningen alltid startar,
-            // även om autoplay-parametern skulle ignoreras av spelaren.
-            event.target.mute();
+            // Försöker spela upp med ljud direkt — fungerar tack vare
+            // gesten från "Starta spelkvällen"-knappen tidigare i sessionen.
             event.target.playVideo();
             // Extra försök strax efter, ifall första anropet kom för tidigt
             setTimeout(() => { try { event.target.playVideo(); } catch(e){} }, 400);
+            scheduleAutoplayFallbackCheck();
           },
           onStateChange: onPlayerStateChange
         }
@@ -944,6 +946,21 @@
       // API:et hann inte ladda klart — försök igen om en liten stund
       setTimeout(() => playVideo(id, start, end), 300);
     }
+  }
+
+  function scheduleAutoplayFallbackCheck() {
+    // Om webbläsaren ändå blockerade den automatiska uppspelningen (t.ex.
+    // första klippet på iPhone/Safari) står spelaren still och väntar.
+    // Efter en kort stund — gott om tid för god uppkoppling att ha startat
+    // — visar vi en liten knapp istället för att låta "laddar"-skärmen
+    // hänga kvar i evighet.
+    setTimeout(() => {
+      try {
+        if (ytPlayer && ytPlayer.getPlayerState() !== YT.PlayerState.PLAYING) {
+          document.getElementById('sound-pill').style.display = 'flex';
+        }
+      } catch (e) {}
+    }, 1200);
   }
 
   function onPlayerStateChange(event) {
@@ -997,28 +1014,15 @@
   }
 
   function revealVideo() {
-    // Öppnar ridåerna och försöker slå på ljudet automatiskt — ingen
-    // tryckning krävs. Det här funkar tillförlitligt på Chrome/Android så
-    // fort sidan haft EN interaktion (knappen "Starta spelkvällen"). På
-    // iPhone/Safari kan just det FÖRSTA klippet fortfarande spärras av
-    // webbläsaren; om så sker dyker en liten ljud-pill upp längst ner.
+    // Öppnar ridåerna. Ljudet ber vi redan om direkt i playerVars (mute:0)
+    // istället för att avmuta i efterhand — det senare är precis det
+    // mönster Chrome pausar videon för att stoppa. Om uppspelningen kommit
+    // hit (state === PLAYING) har webbläsaren redan godkänt ljudet.
     openCurtains();
-    try {
-      ytPlayer.unMute();
-      ytPlayer.setVolume(100);
-    } catch (e) { /* spelaren inte redo — pillen nedan fångar upp det */ }
+    document.getElementById('sound-pill').style.display = 'none';
     if (document.getElementById('audioOnlyToggle').checked) {
       document.getElementById('audio-overlay').style.display = 'flex';
     }
-    setTimeout(checkSoundUnlocked, 500);
-  }
-
-  function checkSoundUnlocked() {
-    try {
-      if (ytPlayer && ytPlayer.isMuted()) {
-        document.getElementById('sound-pill').style.display = 'flex';
-      }
-    } catch (e) { /* ignorera — spelaren kan vara mellan klipp */ }
   }
 
   function forceUnmute() {
