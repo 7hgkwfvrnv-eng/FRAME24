@@ -465,16 +465,24 @@
 
   function maybeShowTitleShield() {
     // Kolla om det faktiskt är RÄTT video som spelar (inte en reklamannons
-    // — annonser har ett annat video-ID än det vi bad om). Visa då
-    // titel-listen i 5 sekunder igen, exakt när den riktiga trailern startar
-    // (oavsett om den redan visats en gång vid själva tryckningen).
-    try {
-      const data = ytPlayer.getVideoData();
-      if (!shieldShownForCurrentVideo && data && data.video_id === currentVideoId) {
-        shieldShownForCurrentVideo = true;
-        showTitleShield();
-      }
-    } catch (e) { /* ignorera om data inte är tillgänglig ännu */ }
+    // — annonser har ett annat video-ID än det vi bad om). Eftersom
+    // YouTube ibland rapporterar "spelar"-status en bråkdel av en sekund
+    // innan video-ID:t hunnit uppdateras internt, kollar vi upprepade
+    // gånger under en kort period istället för bara en gång.
+    if (shieldShownForCurrentVideo) return;
+    let attempts = 0;
+    const poll = setInterval(() => {
+      attempts++;
+      try {
+        const data = ytPlayer.getVideoData();
+        if (data && data.video_id === currentVideoId) {
+          shieldShownForCurrentVideo = true;
+          showTitleShield();
+          clearInterval(poll);
+        }
+      } catch (e) { /* spelaren inte redo ännu, försök igen */ }
+      if (attempts > 90 || shieldShownForCurrentVideo) clearInterval(poll);
+    }, 500);
   }
 
   function onPlayerStateChange(event) {
