@@ -31,18 +31,18 @@
   .curtain {
     position: fixed;
     top: 0; bottom: 0;
-    width: 11vw;
-    min-width: 40px;
-    max-width: 110px;
+    width: 26vw;
+    min-width: 90px;
+    max-width: 260px;
     z-index: 0;
     pointer-events: none;
-    transition: transform 0.85s cubic-bezier(0.65, 0, 0.35, 1);
+    transition: transform 0.95s cubic-bezier(0.65, 0, 0.35, 1);
   }
   .curtain.left { left: 0; transform: translateX(0); }
   .curtain.right { right: 0; transform: translateX(0); }
   .curtain.right svg { transform: scaleX(-1); }
-  .curtain.open.left { transform: translateX(-72%); }
-  .curtain.open.right { transform: translateX(72%); }
+  .curtain.open.left { transform: translateX(-88%); }
+  .curtain.open.right { transform: translateX(88%); }
   .curtain svg { width: 100%; height: 100%; display: block; }
 
   #wrap {
@@ -71,6 +71,7 @@
     color: #efe9dc;
     display: flex;
     align-items: center;
+    justify-content: center;
   }
   .fr-reel {
     position: relative;
@@ -681,11 +682,18 @@
       if (end) loadOpts.endSeconds = end;
       ytPlayer.loadVideoById(loadOpts);
       ytPlayer.mute();
+      ytPlayer.playVideo();
     } else if (ytApiReady && typeof YT !== 'undefined') {
       ytPlayer = new YT.Player('yt-player', {
         videoId: id,
         playerVars: playerVars,
         events: {
+          onReady: function (event) {
+            // Garanterar att den tysta autoplay-uppspelningen alltid startar,
+            // även om autoplay-parametern skulle ignoreras av spelaren.
+            event.target.mute();
+            event.target.playVideo();
+          },
           onStateChange: onPlayerStateChange
         }
       });
