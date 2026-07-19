@@ -965,27 +965,26 @@
 
   function onPlayerStateChange(event) {
     // YT.PlayerState: -1 ej startad, 0 avslutad, 1 spelar, 2 pausad, 3 buffrar, 5 köad
-    const buffer = document.getElementById('buffer-overlay');
-
     if (event.data === YT.PlayerState.PLAYING) {
-      buffer.style.display = 'none';
-
       // Video-ID:t visade sig opålitligt för att skilja reklam från riktigt
-      // innehåll (YouTube rapporterar samma ID under reklamen också). Istället
-      // triggar vi blurren vid VARJE ny övergång till "spelar"-status — det
-      // täcker både starten och (om reklam finns) exakt när reklamen slutar
-      // och trailern faktiskt börjar.
+      // innehåll (YouTube rapporterar samma ID under reklamen också), så vi
+      // gör inget försök att dölja eller hoppa förbi en eventuell annons —
+      // det får visas precis som YouTube avser, "Hoppa över"-knapp och allt.
+      // Blurren nedan täcker bara textremsan där titeln annars skulle blinka
+      // till och avslöja filmen, inte innehållet i sig.
       showTitleShield();
 
       if (!revealedForCurrentVideo) {
+        // Döljer bara det korta ögonblicket INNAN något alls har börjat
+        // spela (varken annons eller trailer) — helt ofarligt eftersom det
+        // inte finns något att dölja än. Så fort NÅGOT börjar spela öppnas
+        // ridåerna en gång för det här kortet och overlayn kommer inte
+        // tillbaka, oavsett vad som händer sen (annonsbuffring etc.) — så
+        // vi aldrig riskerar att skymma en annons eller dess kontroller.
         revealedForCurrentVideo = true;
+        document.getElementById('buffer-overlay').style.display = 'none';
         revealVideo();
       }
-    } else if (document.getElementById('player-box').style.display === 'block') {
-      // Så fort videon INTE aktivt spelar (t.ex. under buffring eller precis
-      // efter att en reklamannons tagit slut) täcker vi skärmen igen så
-      // YouTubes egen titel/kontrollpanel aldrig hinner synas.
-      buffer.style.display = 'flex';
     }
   }
 
