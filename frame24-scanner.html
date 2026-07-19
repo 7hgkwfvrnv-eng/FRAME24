@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Frame24</title>
+<script src="https://www.youtube.com/iframe_api"></script>
 <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -198,14 +199,10 @@
 
   <!-- Player -->
   <div id="player-box">
-    <iframe id="yt-iframe" width="100%" height="100%" src=""
-      frameborder="0"
-      allow="autoplay; encrypted-media; fullscreen"
-      allowfullscreen>
-    </iframe>
+    <div id="yt-player"></div>
     <div id="start-overlay" onclick="startPlayback()">
       <div id="start-icon">▶</div>
-      <div id="start-text">Tryck för att starta klippet</div>
+      <div id="start-text">Tryck för att starta</div>
     </div>
     <div id="audio-overlay">
       <div id="audio-overlay-icon">♪</div>
@@ -364,14 +361,15 @@
   }
 
   let currentVideoId = null;
+  let ytPlayer = null;
+  let ytApiReady = false;
+
+  window.onYouTubeIframeAPIReady = function () {
+    ytApiReady = true;
+  };
 
   function playVideo(id) {
     currentVideoId = id;
-    // Starta videon ljudlöst direkt — det kräver ingen användarinteraktion
-    // och undviker att YouTubes egen "Titta på YouTube"-ruta (med titel
-    // och kanalnamn) visas istället för att spela upp automatiskt.
-    const src = `https://www.youtube.com/embed/${id}?autoplay=1&mute=1&controls=1&modestbranding=1&rel=0&iv_load_policy=3&fs=1&playsinline=1&enablejsapi=1`;
-    document.getElementById('yt-iframe').src = src;
     document.getElementById('scan-view').style.display = 'none';
     document.getElementById('player-box').style.display = 'block';
     document.getElementById('title-reveal').textContent = 'Gissa året — vänd sen på kortet för facit';
@@ -380,16 +378,54 @@
     document.getElementById('start-text').textContent = 'Tryck för att starta';
     document.getElementById('start-overlay').style.display = 'flex';
     document.getElementById('audio-overlay').style.display = 'none';
+
+    const playerVars = {
+      autoplay: 1,
+      mute: 1,
+      controls: 1,
+      modestbranding: 1,
+      rel: 0,
+      iv_load_policy: 3,
+      fs: 1,
+      playsinline: 1
+    };
+
+    if (ytPlayer) {
+      // Återanvänd samma spelarinstans — snabbare och undviker dubbletter
+      ytPlayer.loadVideoById(id);
+      ytPlayer.mute();
+    } else if (ytApiReady && typeof YT !== 'undefined') {
+      ytPlayer = new YT.Player('yt-player', {
+        videoId: id,
+        playerVars: playerVars,
+        events: {
+          onStateChange: onPlayerStateChange
+        }
+      });
+    } else {
+      // API:et hann inte ladda klart — försök igen om en liten stund
+      setTimeout(() => playVideo(id), 300);
+    }
+  }
+
+  function onPlayerStateChange(event) {
+    // YT.PlayerState: -1 ej startad, 0 avslutad, 1 spelar, 2 pausad, 3 buffrar, 5 köad
+    // Så fort videon INTE aktivt spelar (t.ex. direkt efter att en reklamannons
+    // tagit slut och spelaren tillfälligt pausar) täcker vi skärmen igen så
+    // YouTubes egen titel/kontrollpanel aldrig hinner synas för spelarna.
+    if (event.data === YT.PlayerState.PLAYING) {
+      document.getElementById('start-overlay').style.display = 'none';
+    } else if (document.getElementById('player-box').style.display === 'block') {
+      document.getElementById('start-icon').textContent = '▶';
+      document.getElementById('start-text').textContent = 'Tryck för att starta';
+      document.getElementById('start-overlay').style.display = 'flex';
+    }
   }
 
   function startPlayback() {
-    const iframe = document.getElementById('yt-iframe');
-    // Skickar kommandon direkt till den redan spelande videon via YouTubes
-    // postMessage-API — kräver ingen ny sidladdning, vilket gör att
-    // "riktig användarinteraktion" räknas korrekt för just det här trycket.
-    iframe.contentWindow.postMessage(JSON.stringify({ event: 'command', func: 'unMute', args: [] }), '*');
-    iframe.contentWindow.postMessage(JSON.stringify({ event: 'command', func: 'playVideo', args: [] }), '*');
-
+    if (!ytPlayer) return;
+    ytPlayer.unMute();
+    ytPlayer.playVideo();
     document.getElementById('start-overlay').style.display = 'none';
     if (document.getElementById('audioOnlyToggle').checked) {
       document.getElementById('audio-overlay').style.display = 'flex';
@@ -402,7 +438,9 @@
   }
 
   function scanNext() {
-    document.getElementById('yt-iframe').src = '';
+    if (ytPlayer) {
+      ytPlayer.stopVideo();
+    }
     document.getElementById('player-box').style.display = 'none';
     document.getElementById('title-reveal').textContent = '';
     document.getElementById('next-btn').style.display = 'none';
@@ -422,25 +460,6 @@
       playVideo(extractId(idParam) || idParam);
     } else {
       startCamera();
-    }
-  });
-
-  window.addEventListener('message', (event) => {
-    if (typeof event.data !== 'string') return;
-    let data;
-    try { data = JSON.parse(event.data); } catch (e) { return; }
-    if (data.event !== 'onStateChange') return;
-
-    // YouTube-status: -1 ej startad, 0 avslutad, 1 spelar, 2 pausad, 3 buffrar, 5 köad
-    // Så fort videon INTE aktivt spelar (t.ex. direkt efter att en reklamannons
-    // tagit slut och spelaren tillfälligt pausar) täcker vi skärmen igen så
-    // YouTubes egen titel/kontrollpanel aldrig hinner synas för spelarna.
-    if (data.info === 1) {
-      document.getElementById('start-overlay').style.display = 'none';
-    } else if (document.getElementById('player-box').style.display === 'block') {
-      document.getElementById('start-icon').textContent = '▶';
-      document.getElementById('start-text').textContent = 'Tryck för att starta';
-      document.getElementById('start-overlay').style.display = 'flex';
     }
   });
 
