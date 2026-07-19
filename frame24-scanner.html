@@ -36,9 +36,13 @@
     max-width: 110px;
     z-index: 0;
     pointer-events: none;
+    transition: transform 0.85s cubic-bezier(0.65, 0, 0.35, 1);
   }
-  .curtain.left { left: 0; }
-  .curtain.right { right: 0; transform: scaleX(-1); }
+  .curtain.left { left: 0; transform: translateX(0); }
+  .curtain.right { right: 0; transform: translateX(0); }
+  .curtain.right svg { transform: scaleX(-1); }
+  .curtain.open.left { transform: translateX(-72%); }
+  .curtain.open.right { transform: translateX(72%); }
   .curtain svg { width: 100%; height: 100%; display: block; }
 
   #wrap {
@@ -52,10 +56,12 @@
     padding: 40px 20px;
   }
   #logo-wrap {
+    width: 100%;
     margin: 8px 0 52px 0;
     display: flex;
     align-items: center;
     justify-content: center;
+    text-align: center;
   }
   .fr-wordmark {
     font-family: 'Cormorant Garamond', serif;
@@ -270,6 +276,7 @@
     color: #aaa;
     cursor: pointer;
     user-select: none;
+    margin-top: 34px;
   }
   .switch input { accent-color: #c9a44c; width: 16px; height: 16px; cursor: pointer; }
 
@@ -739,11 +746,19 @@
     }
   }
 
+  function openCurtains() {
+    document.querySelectorAll('.curtain').forEach(c => c.classList.add('open'));
+  }
+  function closeCurtains() {
+    document.querySelectorAll('.curtain').forEach(c => c.classList.remove('open'));
+  }
+
   function startPlayback() {
     if (!ytPlayer) return;
     userStarted = true;
     ytPlayer.unMute();
     ytPlayer.playVideo();
+    openCurtains();
     const overlay = document.getElementById('start-overlay');
     overlay.style.background = 'transparent';
     document.getElementById('start-icon').style.display = 'none';
@@ -765,6 +780,7 @@
     if (ytPlayer) {
       ytPlayer.stopVideo();
     }
+    closeCurtains();
     document.getElementById('player-box').style.display = 'none';
     document.getElementById('title-reveal').textContent = '';
     document.getElementById('next-btn').style.display = 'none';
