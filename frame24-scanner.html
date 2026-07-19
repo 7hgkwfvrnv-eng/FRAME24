@@ -314,7 +314,8 @@
     text-transform: uppercase;
     color: #888;
   }
-  #start-overlay {
+  /* Döljer YouTubes UI/annonser under buffring — visas automatiskt, ingen tryckning krävs */
+  #buffer-overlay {
     position: absolute;
     inset: 0;
     background: #0a0a0a;
@@ -322,42 +323,93 @@
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    cursor: pointer;
+    pointer-events: none;
     z-index: 5;
   }
-  #start-icon {
-    width: 64px;
-    height: 64px;
+  #buffer-spinner {
+    width: 34px;
+    height: 34px;
+    border-radius: 50%;
+    border: 2px solid rgba(201,164,76,0.25);
+    border-top-color: #c9a44c;
     margin-bottom: 12px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    animation: playPulse 2.2s ease-in-out infinite;
+    animation: bufferSpin 0.9s linear infinite;
   }
-  #start-icon svg { width: 100%; height: 100%; }
-  @keyframes playPulse {
-    0%, 100% { transform: scale(1); filter: drop-shadow(0 0 6px rgba(201,164,76,0.25)); }
-    50%      { transform: scale(1.06); filter: drop-shadow(0 0 14px rgba(201,164,76,0.5)); }
+  @keyframes bufferSpin { to { transform: rotate(360deg); } }
+  #buffer-text {
+    font-family: 'Cormorant Garamond', serif;
+    font-size: 13px;
+    font-style: italic;
+    letter-spacing: 1px;
+    color: #b8a888;
   }
   @media (prefers-reduced-motion: reduce) {
-    #start-icon { animation: none; }
+    #buffer-spinner { animation: none; }
   }
-  #start-text {
-    font-size: 13px;
-    letter-spacing: 1px;
-    color: #0a0a0a;
-    background: #c9a44c;
-    padding: 9px 20px;
-    border-radius: 20px;
-    font-weight: 700;
-    text-transform: uppercase;
-  }
-  .switch {
-    display: flex;
+  /* Liten återställningsknapp — syns bara om webbläsaren blockerade
+     automatiskt ljud (t.ex. första klippet på iPhone). En tryckning
+     räcker sen för hela kvällen. */
+  #sound-pill {
+    position: absolute;
+    bottom: 16px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: none;
     align-items: center;
     gap: 8px;
+    background: rgba(10,10,10,0.85);
+    border: 1px solid #c9a44c;
+    color: #efe9dc;
+    padding: 9px 18px;
+    border-radius: 20px;
+    font-size: 12px;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    cursor: pointer;
+    z-index: 7;
+    animation: soundPillPulse 1.6s ease-in-out infinite;
+  }
+  @keyframes soundPillPulse {
+    0%, 100% { box-shadow: 0 0 0 rgba(201,164,76,0); }
+    50%      { box-shadow: 0 0 14px rgba(201,164,76,0.45); }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    #sound-pill { animation: none; }
+  }
+  /* Engångsskärm — väcker ljud+kamera med en enda tryckning för hela kvällen */
+  #session-gate {
+    position: fixed;
+    inset: 0;
+    z-index: 20;
+    background: radial-gradient(ellipse at 50% 30%, #1a1210 0%, #0a0605 55%, #050303 100%);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    padding: 20px;
+  }
+  #session-gate-sub {
+    font-family: 'Cormorant Garamond', serif;
+    font-size: 11px;
+    letter-spacing: 5px;
+    color: #8a7358;
+    margin-top: 4px;
+    margin-bottom: 44px;
+  }
+  #session-gate-btn {
+    padding: 15px 34px;
+    font-size: 14px;
+    margin-top: 0;
+  }
+  #session-gate-hint {
+    margin-top: 18px;
+    font-family: 'Cormorant Garamond', serif;
     font-size: 13px;
-    color: #aaa;
+    font-style: italic;
+    color: #8a7358;
+    line-height: 1.6;
+  }
     cursor: pointer;
     user-select: none;
     margin-top: 34px;
@@ -491,7 +543,7 @@
   @media (max-width: 360px) {
     .curtain { min-width: 20px; }
     .fr-wordmark { font-size: 22px; }
-    #start-text { font-size: 12px; padding: 8px 16px; }
+    #sound-pill { font-size: 11px; padding: 8px 14px; }
   }
 
   /* Låg skärmhöjd i landskapsläge — undvik att logga + gardiner tränger undan scannern */
@@ -576,6 +628,25 @@
     </g>
   </svg>
 </div>
+<div id="session-gate">
+  <div class="fr-wordmark" style="font-size:30px;">
+    FR<div class="fr-reel">
+      <div class="leg l"></div>
+      <div class="leg r"></div>
+      <div class="hub">
+        <i style="top:2px; left:6.6px;"></i>
+        <i style="top:4.6px; left:10.6px;"></i>
+        <i style="top:9.5px; left:9.2px;"></i>
+        <i style="top:9.5px; left:3.6px;"></i>
+        <i style="top:4.6px; left:2.2px;"></i>
+        <i style="top:6.6px; left:6.4px; width:2.6px; height:2.6px;"></i>
+      </div>
+    </div>ME24
+  </div>
+  <div id="session-gate-sub">ETT FILMKUNSKAPSSPEL</div>
+  <button id="session-gate-btn" onclick="beginSession()">Starta spelkvällen</button>
+  <div id="session-gate-hint">Startar kameran och väcker ljudet —<br>behövs bara denna enda gång.</div>
+</div>
 <div id="wrap">
 
   <div id="logo-wrap">
@@ -607,7 +678,7 @@
       <div id="scan-frame"></div>
       <div id="scan-hint">Rikta kortets QR-kod mot bioduken<br>för att starta trailern</div>
     </div>
-    <div id="status">Startar kameran...</div>
+    <div id="status">Tryck på "Starta spelkvällen" ovan för att börja</div>
     <button id="retry-btn" style="display:none;" onclick="scanNext()">Försök igen</button>
   </div>
 
@@ -615,15 +686,11 @@
   <div id="player-box" class="cinema-screen">
     <div id="yt-player"></div>
     <div id="title-shield"></div>
-    <div id="start-overlay" onclick="startPlayback()">
-      <div id="start-icon">
-        <svg viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg">
-          <circle cx="32" cy="32" r="30" fill="none" stroke="#c9a44c" stroke-width="1.5" opacity="0.55"/>
-          <path d="M26 20 L46 32 L26 44 Z" fill="#c9a44c"/>
-        </svg>
-      </div>
-      <div id="start-text">Tryck för att starta</div>
+    <div id="buffer-overlay">
+      <div id="buffer-spinner"></div>
+      <div id="buffer-text">Laddar trailer …</div>
     </div>
+    <div id="sound-pill" onclick="forceUnmute()">🔇 Tryck för ljud</div>
     <div id="audio-overlay">
       <div id="audio-overlay-icon">♪</div>
       <div id="audio-overlay-text">Endast ljud — gissa filmen</div>
@@ -805,7 +872,7 @@
   let currentVideoId = null;
   let ytPlayer = null;
   let ytApiReady = false;
-  let userStarted = false;
+  let revealedForCurrentVideo = false;
   let shieldShownForCurrentVideo = false;
   let shieldTimer = null;
 
@@ -822,19 +889,15 @@
 
   function playVideo(id, start, end) {
     currentVideoId = id;
-    userStarted = false;
+    revealedForCurrentVideo = false;
     shieldShownForCurrentVideo = false;
     document.getElementById('title-shield').style.display = 'none';
     document.getElementById('scan-view').style.display = 'none';
     document.getElementById('player-box').style.display = 'block';
     document.getElementById('title-reveal').textContent = 'Gissa året — vänd sen på kortet för facit';
     document.getElementById('next-btn').style.display = 'inline-block';
-    const overlay = document.getElementById('start-overlay');
-    overlay.style.background = '#0a0a0a';
-    overlay.style.display = 'flex';
-    document.getElementById('start-icon').style.display = 'flex';
-    document.getElementById('start-text').style.display = 'block';
-    document.getElementById('start-text').textContent = 'Tryck för att starta';
+    document.getElementById('buffer-overlay').style.display = 'flex';
+    document.getElementById('sound-pill').style.display = 'none';
     document.getElementById('audio-overlay').style.display = 'none';
 
     const playerVars = {
@@ -852,7 +915,9 @@
     if (end) playerVars.end = end;
 
     if (ytPlayer) {
-      // Återanvänd samma spelarinstans — snabbare och undviker dubbletter
+      // Återanvänd samma spelarinstans — snabbare, undviker dubbletter, och
+      // avgörande för ljudet: samma <video>-element som webbläsaren redan
+      // godkänt för uppspelning tidigare under kvällen får fortsätta göra det.
       const loadOpts = { videoId: id };
       if (start) loadOpts.startSeconds = start;
       if (end) loadOpts.endSeconds = end;
@@ -881,53 +946,29 @@
     }
   }
 
-  function maybeShowTitleShield() {
-    // Kolla om det faktiskt är RÄTT video som spelar (inte en reklamannons
-    // — annonser har ett annat video-ID än det vi bad om). Eftersom
-    // YouTube ibland rapporterar "spelar"-status en bråkdel av en sekund
-    // innan video-ID:t hunnit uppdateras internt, kollar vi upprepade
-    // gånger under en kort period istället för bara en gång.
-    if (shieldShownForCurrentVideo) return;
-    let attempts = 0;
-    const poll = setInterval(() => {
-      attempts++;
-      try {
-        const data = ytPlayer.getVideoData();
-        if (data && data.video_id === currentVideoId) {
-          shieldShownForCurrentVideo = true;
-          showTitleShield();
-          clearInterval(poll);
-        }
-      } catch (e) { /* spelaren inte redo ännu, försök igen */ }
-      if (attempts > 90 || shieldShownForCurrentVideo) clearInterval(poll);
-    }, 500);
-  }
-
   function onPlayerStateChange(event) {
     // YT.PlayerState: -1 ej startad, 0 avslutad, 1 spelar, 2 pausad, 3 buffrar, 5 köad
-    // Så fort videon INTE aktivt spelar (t.ex. direkt efter att en reklamannons
-    // tagit slut och spelaren tillfälligt pausar/buffrar) täcker vi skärmen
-    // igen så YouTubes egen titel/kontrollpanel aldrig hinner synas.
-    if (event.data === YT.PlayerState.PLAYING && userStarted) {
-      const overlay = document.getElementById('start-overlay');
-      overlay.style.background = 'transparent';
-      document.getElementById('start-icon').style.display = 'none';
-      document.getElementById('start-text').style.display = 'none';
+    const buffer = document.getElementById('buffer-overlay');
+
+    if (event.data === YT.PlayerState.PLAYING) {
+      buffer.style.display = 'none';
 
       // Video-ID:t visade sig opålitligt för att skilja reklam från riktigt
       // innehåll (YouTube rapporterar samma ID under reklamen också). Istället
-      // triggar vi blurren vid VARJE ny övergång till "spelar"-status efter
-      // tryckningen — det täcker både starten och (om reklam finns) exakt
-      // när reklamen slutar och trailern faktiskt börjar.
+      // triggar vi blurren vid VARJE ny övergång till "spelar"-status — det
+      // täcker både starten och (om reklam finns) exakt när reklamen slutar
+      // och trailern faktiskt börjar.
       showTitleShield();
 
+      if (!revealedForCurrentVideo) {
+        revealedForCurrentVideo = true;
+        revealVideo();
+      }
     } else if (document.getElementById('player-box').style.display === 'block') {
-      const overlay = document.getElementById('start-overlay');
-      overlay.style.background = '#0a0a0a';
-      overlay.style.display = 'flex';
-      document.getElementById('start-icon').style.display = 'flex';
-      document.getElementById('start-text').style.display = 'block';
-      document.getElementById('start-text').textContent = 'Tryck för att starta';
+      // Så fort videon INTE aktivt spelar (t.ex. under buffring eller precis
+      // efter att en reklamannons tagit slut) täcker vi skärmen igen så
+      // YouTubes egen titel/kontrollpanel aldrig hinner synas.
+      buffer.style.display = 'flex';
     }
   }
 
@@ -955,22 +996,41 @@
     });
   }
 
-  function startPlayback() {
-    if (!ytPlayer) return;
-    userStarted = true;
-    ytPlayer.unMute();
-    ytPlayer.playVideo();
+  function revealVideo() {
+    // Öppnar ridåerna och försöker slå på ljudet automatiskt — ingen
+    // tryckning krävs. Det här funkar tillförlitligt på Chrome/Android så
+    // fort sidan haft EN interaktion (knappen "Starta spelkvällen"). På
+    // iPhone/Safari kan just det FÖRSTA klippet fortfarande spärras av
+    // webbläsaren; om så sker dyker en liten ljud-pill upp längst ner.
     openCurtains();
-    const overlay = document.getElementById('start-overlay');
-    overlay.style.background = 'transparent';
-    document.getElementById('start-icon').style.display = 'none';
-    document.getElementById('start-text').style.display = 'none';
-    // Visa blur-listen direkt vid tryckningen, oavsett om videon har reklam
-    // eller inte.
-    showTitleShield();
+    try {
+      ytPlayer.unMute();
+      ytPlayer.setVolume(100);
+    } catch (e) { /* spelaren inte redo — pillen nedan fångar upp det */ }
     if (document.getElementById('audioOnlyToggle').checked) {
       document.getElementById('audio-overlay').style.display = 'flex';
     }
+    setTimeout(checkSoundUnlocked, 500);
+  }
+
+  function checkSoundUnlocked() {
+    try {
+      if (ytPlayer && ytPlayer.isMuted()) {
+        document.getElementById('sound-pill').style.display = 'flex';
+      }
+    } catch (e) { /* ignorera — spelaren kan vara mellan klipp */ }
+  }
+
+  function forceUnmute() {
+    // Anropas direkt från en tryckning på pillen — det räknas som en äkta
+    // användargest, vilket webbläsaren tillåter oavsett tidigare spärrar.
+    if (!ytPlayer) return;
+    try {
+      ytPlayer.unMute();
+      ytPlayer.setVolume(100);
+      ytPlayer.playVideo();
+    } catch (e) {}
+    document.getElementById('sound-pill').style.display = 'none';
   }
 
   function toggleOverlay() {
@@ -986,7 +1046,8 @@
     document.getElementById('player-box').style.display = 'none';
     document.getElementById('title-reveal').textContent = '';
     document.getElementById('next-btn').style.display = 'none';
-    document.getElementById('start-overlay').style.display = 'none';
+    document.getElementById('buffer-overlay').style.display = 'none';
+    document.getElementById('sound-pill').style.display = 'none';
     document.getElementById('audio-overlay').style.display = 'none';
     document.getElementById('title-shield').style.display = 'none';
     currentVideoId = null;
@@ -995,17 +1056,25 @@
     startCamera();
   }
 
+  function beginSession() {
+    // Den enda tryckning som krävs under hela kvällen. Ger webbläsaren en
+    // äkta användargest att utgå från, vilket sedan tillåter automatisk
+    // ljuduppspelning för alla efterföljande kort.
+    document.getElementById('session-gate').style.display = 'none';
+    startCamera();
+  }
+
   window.addEventListener('DOMContentLoaded', () => {
     // Auto-load via ?id= for testing without camera
     const params = new URLSearchParams(window.location.search);
     const idParam = params.get('id');
     if (idParam) {
+      document.getElementById('session-gate').style.display = 'none';
       const start = params.get('start') ? parseInt(params.get('start'), 10) : null;
       const end = params.get('end') ? parseInt(params.get('end'), 10) : null;
       playVideo(extractId(idParam) || idParam, start, end);
-    } else {
-      startCamera();
     }
+    // annars väntar vi på tryckningen på "Starta spelkvällen"
   });
 
   window.addEventListener('beforeunload', stopCamera);
