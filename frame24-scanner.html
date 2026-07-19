@@ -293,6 +293,18 @@
     return null;
   }
 
+  function extractClip(input) {
+    input = input.trim();
+    const id = extractId(input);
+    let start = null, end = null;
+    try {
+      const url = new URL(input);
+      if (url.searchParams.get('start')) start = parseInt(url.searchParams.get('start'), 10);
+      if (url.searchParams.get('end')) end = parseInt(url.searchParams.get('end'), 10);
+    } catch (e) { /* inte en URL, inga klipp-tider att hämta */ }
+    return { id, start, end };
+  }
+
   function isLikelyUrl(input) {
     try {
       const url = new URL(input.trim());
@@ -346,9 +358,9 @@
         });
 
         if (code && code.data) {
-          const id = extractId(code.data);
-          if (id) {
-            handleScan(id);
+          const clip = extractClip(code.data);
+          if (clip.id) {
+            handleScan(clip);
             return;
           } else if (isLikelyUrl(code.data)) {
             document.getElementById('status').textContent = 'Kände inte igen som YouTube-länk, öppnar: ' + code.data;
@@ -367,10 +379,10 @@
     requestAnimationFrame(tick);
   }
 
-  function handleScan(id) {
+  function handleScan(clip) {
     scanning = false;
     stopCamera();
-    playVideo(id);
+    playVideo(clip.id, clip.start, clip.end);
   }
 
   function stopCamera() {
@@ -390,7 +402,7 @@
     ytApiReady = true;
   };
 
-  function playVideo(id) {
+  function playVideo(id, start, end) {
     currentVideoId = id;
     userStarted = false;
     shieldShownForCurrentVideo = false;
@@ -419,10 +431,15 @@
       playsinline: 1,
       disablekb: 1
     };
+    if (start) playerVars.start = start;
+    if (end) playerVars.end = end;
 
     if (ytPlayer) {
       // Återanvänd samma spelarinstans — snabbare och undviker dubbletter
-      ytPlayer.loadVideoById(id);
+      const loadOpts = { videoId: id };
+      if (start) loadOpts.startSeconds = start;
+      if (end) loadOpts.endSeconds = end;
+      ytPlayer.loadVideoById(loadOpts);
       ytPlayer.mute();
     } else if (ytApiReady && typeof YT !== 'undefined') {
       ytPlayer = new YT.Player('yt-player', {
@@ -434,8 +451,23 @@
       });
     } else {
       // API:et hann inte ladda klart — försök igen om en liten stund
-      setTimeout(() => playVideo(id), 300);
+      setTimeout(() => playVideo(id, start, end), 300);
     }
+  }
+
+  function maybeShowTitleShield() {
+    // Kolla om det faktiskt är RÄTT video som spelar (inte en reklamannons
+    // — annonser har ett annat video-ID än det vi bad om). Visa då
+    // titel-listen i 5 sekunder, exakt när den riktiga trailern startar.
+    try {
+      const data = ytPlayer.getVideoData();
+      if (!shieldShownForCurrentVideo && data && data.video_id === currentVideoId) {
+        shieldShownForCurrentVideo = true;
+        const shield = document.getElementById('title-shield');
+        shield.style.display = 'block';
+        setTimeout(() => { shield.style.display = 'none'; }, 5000);
+      }
+    } catch (e) { /* ignorera om data inte är tillgänglig ännu */ }
   }
 
   function onPlayerStateChange(event) {
@@ -454,18 +486,7 @@
       document.getElementById('start-icon').style.display = 'none';
       document.getElementById('start-text').style.display = 'none';
 
-      // Kolla om det faktiskt är RÄTT video som spelar (inte en reklamannons
-      // — annonser har ett annat video-ID än det vi bad om). Visa då
-      // titel-listen i 3 sekunder, exakt när den riktiga trailern startar.
-      try {
-        const data = ytPlayer.getVideoData();
-        if (!shieldShownForCurrentVideo && data && data.video_id === currentVideoId) {
-          shieldShownForCurrentVideo = true;
-          const shield = document.getElementById('title-shield');
-          shield.style.display = 'block';
-          setTimeout(() => { shield.style.display = 'none'; }, 5000);
-        }
-      } catch (e) { /* ignorera om data inte är tillgänglig ännu */ }
+      maybeShowTitleShield();
 
     } else if (document.getElementById('player-box').style.display === 'block') {
       const overlay = document.getElementById('start-overlay');
@@ -487,6 +508,10 @@
     overlay.style.background = 'transparent';
     document.getElementById('start-icon').style.display = 'none';
     document.getElementById('start-text').style.display = 'none';
+    // Reklamfria videor är redan i "playing"-status sedan den tysta
+    // autoplay-starten, så ett nytt onStateChange-event triggas aldrig
+    // av unMute()/playVideo() ovan — vi måste därför även kolla här direkt.
+    maybeShowTitleShield();
     if (document.getElementById('audioOnlyToggle').checked) {
       document.getElementById('audio-overlay').style.display = 'flex';
     }
@@ -518,7 +543,9 @@
     const params = new URLSearchParams(window.location.search);
     const idParam = params.get('id');
     if (idParam) {
-      playVideo(extractId(idParam) || idParam);
+      const start = params.get('start') ? parseInt(params.get('start'), 10) : null;
+      const end = params.get('end') ? parseInt(params.get('end'), 10) : null;
+      playVideo(extractId(idParam) || idParam, start, end);
     } else {
       startCamera();
     }
