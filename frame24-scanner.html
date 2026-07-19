@@ -966,13 +966,11 @@
   function onPlayerStateChange(event) {
     // YT.PlayerState: -1 ej startad, 0 avslutad, 1 spelar, 2 pausad, 3 buffrar, 5 köad
     if (event.data === YT.PlayerState.PLAYING) {
-      // Video-ID:t visade sig opålitligt för att skilja reklam från riktigt
-      // innehåll (YouTube rapporterar samma ID under reklamen också), så vi
-      // gör inget försök att dölja eller hoppa förbi en eventuell annons —
-      // det får visas precis som YouTube avser, "Hoppa över"-knapp och allt.
-      // Blurren nedan täcker bara textremsan där titeln annars skulle blinka
-      // till och avslöja filmen, inte innehållet i sig.
-      showTitleShield();
+      // Vi gör inget försök att dölja eller hoppa förbi en eventuell annons —
+      // den får visas precis som YouTube avser, "Hoppa över"-knapp och allt.
+      // Blurren ska bara komma när den RIKTIGA trailern faktiskt börjar,
+      // inte under annonsen — se pollForRealContent() nedan.
+      pollForRealContent();
 
       if (!revealedForCurrentVideo) {
         // Döljer bara det korta ögonblicket INNAN något alls har börjat
@@ -986,6 +984,28 @@
         revealVideo();
       }
     }
+  }
+
+  function pollForRealContent() {
+    // Annonser rapporterar tyvärr ibland samma "PLAYING"-status som riktigt
+    // innehåll, så ett enda getVideoData()-anrop räcker inte. Vi kollar
+    // upprepat tills det rapporterade video-ID:t faktiskt matchar kortets
+    // — precis då (och först då) vet vi att den riktiga trailern started,
+    // och bara då visar vi blurren som döljer titeltextremsan.
+    if (shieldShownForCurrentVideo) return;
+    let attempts = 0;
+    const poll = setInterval(() => {
+      attempts++;
+      try {
+        const data = ytPlayer.getVideoData();
+        if (data && data.video_id === currentVideoId) {
+          shieldShownForCurrentVideo = true;
+          showTitleShield();
+          clearInterval(poll);
+        }
+      } catch (e) { /* spelaren inte redo ännu, försök igen */ }
+      if (attempts > 60 || shieldShownForCurrentVideo) clearInterval(poll);
+    }, 500);
   }
 
   function toggleCastInfo() {
