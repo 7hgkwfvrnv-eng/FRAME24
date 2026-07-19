@@ -369,6 +369,7 @@
   let currentVideoId = null;
   let ytPlayer = null;
   let ytApiReady = false;
+  let userStarted = false;
 
   window.onYouTubeIframeAPIReady = function () {
     ytApiReady = true;
@@ -376,6 +377,7 @@
 
   function playVideo(id) {
     currentVideoId = id;
+    userStarted = false;
     document.getElementById('scan-view').style.display = 'none';
     document.getElementById('player-box').style.display = 'block';
     document.getElementById('title-reveal').textContent = 'Gissa året — vänd sen på kortet för facit';
@@ -424,10 +426,12 @@
     // Så fort videon INTE aktivt spelar (t.ex. direkt efter att en reklamannons
     // tagit slut och spelaren tillfälligt pausar) täcker vi skärmen igen så
     // YouTubes egen titel/kontrollpanel aldrig hinner synas för spelarna.
-    if (event.data === YT.PlayerState.PLAYING) {
+    if (event.data === YT.PlayerState.PLAYING && userStarted) {
       // Rutan görs osynlig men ligger kvar och fångar upp alla tryck, så
       // ett tryck aldrig når YouTube-ytan direkt (vilket annars triggar
-      // YouTubes obligatoriska titel-/varumärkesruta).
+      // YouTubes obligatoriska titel-/varumärkesruta). Detta sker bara
+      // EFTER att spelaren själv tryckt igång videon medvetet — inte
+      // bara för att den tysta autoplay-uppspelningen räknas som "playing".
       const overlay = document.getElementById('start-overlay');
       overlay.style.background = 'transparent';
       document.getElementById('start-icon').style.display = 'none';
@@ -445,9 +449,13 @@
 
   function startPlayback() {
     if (!ytPlayer) return;
+    userStarted = true;
     ytPlayer.unMute();
     ytPlayer.playVideo();
-    document.getElementById('start-overlay').style.display = 'none';
+    const overlay = document.getElementById('start-overlay');
+    overlay.style.background = 'transparent';
+    document.getElementById('start-icon').style.display = 'none';
+    document.getElementById('start-text').style.display = 'none';
     if (document.getElementById('audioOnlyToggle').checked) {
       document.getElementById('audio-overlay').style.display = 'flex';
     }
