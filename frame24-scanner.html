@@ -27,23 +27,70 @@
     z-index: 3;
   }
 
+  /* Filmkorn — subtil analog textur över hela scenen, som en gammal 35mm-projektion */
+  #grain {
+    position: fixed;
+    inset: -50%;
+    width: 200%;
+    height: 200%;
+    pointer-events: none;
+    z-index: 4;
+    opacity: 0.05;
+    mix-blend-mode: overlay;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+    animation: grainShift 8s steps(8) infinite;
+  }
+  @keyframes grainShift {
+    0%   { transform: translate(0, 0); }
+    12%  { transform: translate(-3%, 2%); }
+    24%  { transform: translate(2%, -4%); }
+    37%  { transform: translate(-4%, 3%); }
+    50%  { transform: translate(3%, 1%); }
+    62%  { transform: translate(-2%, -3%); }
+    75%  { transform: translate(4%, 2%); }
+    87%  { transform: translate(-1%, -2%); }
+    100% { transform: translate(0, 0); }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    #grain { animation: none; }
+  }
+
   /* Biografgardiner på sidorna */
   .curtain {
     position: fixed;
     top: 0; bottom: 0;
-    width: 26vw;
-    min-width: 90px;
-    max-width: 260px;
-    z-index: 0;
+    width: 20vw;
+    min-width: 70px;
+    max-width: 190px;
+    z-index: 2;
     pointer-events: none;
-    transition: transform 0.95s cubic-bezier(0.65, 0, 0.35, 1);
+    transition: transform 1s cubic-bezier(0.7, 0, 0.3, 1);
   }
   .curtain.left { left: 0; transform: translateX(0); }
   .curtain.right { right: 0; transform: translateX(0); }
-  .curtain.right svg { transform: scaleX(-1); }
-  .curtain.open.left { transform: translateX(-88%); }
-  .curtain.open.right { transform: translateX(88%); }
-  .curtain svg { width: 100%; height: 100%; display: block; }
+  /* Halvöppet läge under scanning — kameran syns men ridån ramar in */
+  .curtain.peek.left { transform: translateX(-45%); }
+  .curtain.peek.right { transform: translateX(45%); }
+  /* Helt öppet när trailern spelar */
+  .curtain.open.left { transform: translateX(-92%); }
+  .curtain.open.right { transform: translateX(92%); }
+  .curtain svg {
+    width: 100%; height: 100%; display: block;
+    transform-origin: top center;
+  }
+  .curtain.left svg { animation: fabricSwayL 7s ease-in-out infinite; }
+  .curtain.right svg { animation: fabricSwayR 7s ease-in-out infinite; animation-delay: -3.2s; } /* osynkat med vänster — känns mer organiskt */
+  @keyframes fabricSwayL {
+    0%, 100% { transform: skewX(0deg) scaleX(1); }
+    50%      { transform: skewX(0.35deg) scaleX(1.002); }
+  }
+  @keyframes fabricSwayR {
+    0%, 100% { transform: scaleX(-1) skewX(0deg) scaleX(1); }
+    50%      { transform: scaleX(-1) skewX(0.35deg) scaleX(1.002); }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .curtain svg { animation: none; }
+  }
 
   #wrap {
     position: relative;
@@ -53,7 +100,7 @@
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    padding: 40px 20px;
+    padding: 40px max(20px, 12vw);
   }
   #logo-wrap {
     width: 100%;
@@ -72,12 +119,28 @@
     display: flex;
     align-items: center;
     justify-content: center;
+    animation: marqueeGlow 4.5s ease-in-out infinite;
+  }
+  @keyframes marqueeGlow {
+    0%, 100% { text-shadow: 0 0 10px rgba(201,164,76,0.15), 0 0 22px rgba(201,164,76,0.06); }
+    50%      { text-shadow: 0 0 16px rgba(201,164,76,0.35), 0 0 34px rgba(201,164,76,0.16); }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .fr-wordmark { animation: none; }
   }
   .fr-reel {
     position: relative;
     width: 27px;
     height: 37px;
     margin: 0 1px;
+    animation: marqueeGlowFilter 4.5s ease-in-out infinite;
+  }
+  @keyframes marqueeGlowFilter {
+    0%, 100% { filter: drop-shadow(0 0 4px rgba(201,164,76,0.2)); }
+    50%      { filter: drop-shadow(0 0 8px rgba(201,164,76,0.45)); }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .fr-reel { animation: none; }
   }
   .fr-reel .leg {
     position: absolute;
@@ -146,6 +209,14 @@
     mask-image: radial-gradient(ellipse at 50% 0%, black 0%, transparent 65%);
     pointer-events: none;
     z-index: 0;
+    animation: rayDrift 26s linear infinite;
+  }
+  @keyframes rayDrift {
+    0%   { transform: translateX(-50%) rotate(0deg); }
+    100% { transform: translateX(-50%) rotate(360deg); }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .light-rays { animation: none; }
   }
 
   /* Bioduks-ram: delad känsla för scanner- och spelarytan */
@@ -255,9 +326,21 @@
     z-index: 5;
   }
   #start-icon {
-    font-size: 44px;
-    color: #c9a44c;
+    width: 64px;
+    height: 64px;
     margin-bottom: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    animation: playPulse 2.2s ease-in-out infinite;
+  }
+  #start-icon svg { width: 100%; height: 100%; }
+  @keyframes playPulse {
+    0%, 100% { transform: scale(1); filter: drop-shadow(0 0 6px rgba(201,164,76,0.25)); }
+    50%      { transform: scale(1.06); filter: drop-shadow(0 0 14px rgba(201,164,76,0.5)); }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    #start-icon { animation: none; }
   }
   #start-text {
     font-size: 13px;
@@ -280,6 +363,44 @@
     margin-top: 34px;
   }
   .switch input { accent-color: #c9a44c; width: 16px; height: 16px; cursor: pointer; }
+
+  #mode-row {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 16px;
+  }
+  #cast-hint {
+    font-family: 'Cormorant Garamond', serif;
+    font-size: 14px;
+    letter-spacing: 0.5px;
+    color: #b8a888;
+    cursor: pointer;
+    padding: 6px 16px;
+    border: 1px solid rgba(201,164,76,0.35);
+    border-radius: 20px;
+    transition: all 0.2s;
+    user-select: none;
+  }
+  #cast-hint:hover { border-color: #c9a44c; color: #efe9dc; }
+  .cast-icon { font-size: 13px; }
+  #cast-info {
+    display: none;
+    max-width: 340px;
+    text-align: left;
+    font-family: 'Cormorant Garamond', serif;
+    font-size: 13px;
+    line-height: 1.6;
+    color: #b8a888;
+    background: rgba(20,14,10,0.85);
+    border: 1px solid rgba(201,164,76,0.3);
+    border-radius: 10px;
+    padding: 16px 20px;
+  }
+  #cast-info strong { color: #c9a44c; letter-spacing: 1px; font-size: 12px; text-transform: uppercase; }
+  .cast-step { display: block; margin-top: 8px; }
+  .cast-step b { color: #d8cba8; }
+  .cast-note { display: block; margin-top: 10px; font-style: italic; opacity: 0.8; }
 
   button, .btn {
     padding: 11px 22px;
@@ -339,9 +460,50 @@
     color: #c9a44c;
     text-align: center;
   }
+
+  /* ---- Mobilanpassning ---- */
+  @media (max-width: 480px) {
+    .curtain {
+      width: 9vw;
+      min-width: 26px;
+      max-width: 46px;
+    }
+    .curtain.peek.left { transform: translateX(-40%); }
+    .curtain.peek.right { transform: translateX(40%); }
+    .curtain.open.left { transform: translateX(-88%); }
+    .curtain.open.right { transform: translateX(88%); }
+
+    #wrap { padding: 28px 16px; }
+
+    #scan-box { aspect-ratio: 4 / 5; }
+
+    .fr-wordmark { font-size: 26px; }
+    .fr-sub { font-size: 9px; letter-spacing: 3.5px; }
+    #scan-hint { font-size: 15px; }
+    #status { font-size: 13px; }
+    #cast-info { font-size: 12px; padding: 14px 16px; }
+
+    .spotlight-cone { width: 320px; height: 320px; top: -120px; }
+    .light-rays { width: 480px; height: 480px; top: -180px; }
+  }
+
+  /* Extra smala skärmar (äldre/mindre telefoner) */
+  @media (max-width: 360px) {
+    .curtain { min-width: 20px; }
+    .fr-wordmark { font-size: 22px; }
+    #start-text { font-size: 12px; padding: 8px 16px; }
+  }
+
+  /* Låg skärmhöjd i landskapsläge — undvik att logga + gardiner tränger undan scannern */
+  @media (max-height: 480px) and (orientation: landscape) {
+    #logo-wrap { margin: 4px 0 16px 0; }
+    .fr-wordmark { font-size: 22px; }
+    #mode-row { margin-top: 8px; }
+  }
 </style>
 </head>
 <body>
+<div id="grain"></div>
 <div class="curtain left">
   <svg viewBox="0 0 100 800" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg">
     <defs>
@@ -454,7 +616,12 @@
     <div id="yt-player"></div>
     <div id="title-shield"></div>
     <div id="start-overlay" onclick="startPlayback()">
-      <div id="start-icon">▶</div>
+      <div id="start-icon">
+        <svg viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg">
+          <circle cx="32" cy="32" r="30" fill="none" stroke="#c9a44c" stroke-width="1.5" opacity="0.55"/>
+          <path d="M26 20 L46 32 L26 44 Z" fill="#c9a44c"/>
+        </svg>
+      </div>
       <div id="start-text">Tryck för att starta</div>
     </div>
     <div id="audio-overlay">
@@ -468,6 +635,15 @@
       <input type="checkbox" id="audioOnlyToggle" onchange="toggleOverlay()">
       <span>Bara ljud (dölj bild)</span>
     </label>
+    <div id="cast-hint" onclick="toggleCastInfo()">
+      <span class="cast-icon">📺</span> Spela på TV
+    </div>
+    <div id="cast-info">
+      <strong>Så speglar du till TV:n</strong><br>
+      <span class="cast-step"><b>iPhone:</b> Svep ner från övre högra hörnet → tryck på Skärmdupliceringen → välj din Apple TV eller AirPlay-TV.</span>
+      <span class="cast-step"><b>Android:</b> Öppna snabbinställningarna → tryck på Cast/Skärmduplicering → välj din Chromecast eller TV.</span>
+      <span class="cast-note">Hela Frame24 visas då på TV:n — perfekt för spelkvällen.</span>
+    </div>
   </div>
 
   <div id="title-reveal"></div>
@@ -560,6 +736,7 @@
       video.srcObject = stream;
       await video.play();
       statusEl.textContent = '';
+      peekCurtains();
       scanning = true;
       requestAnimationFrame(tick);
     } catch (err) {
@@ -655,9 +832,8 @@
     const overlay = document.getElementById('start-overlay');
     overlay.style.background = '#0a0a0a';
     overlay.style.display = 'flex';
-    document.getElementById('start-icon').style.display = 'block';
+    document.getElementById('start-icon').style.display = 'flex';
     document.getElementById('start-text').style.display = 'block';
-    document.getElementById('start-icon').textContent = '▶';
     document.getElementById('start-text').textContent = 'Tryck för att starta';
     document.getElementById('audio-overlay').style.display = 'none';
 
@@ -693,6 +869,8 @@
             // även om autoplay-parametern skulle ignoreras av spelaren.
             event.target.mute();
             event.target.playVideo();
+            // Extra försök strax efter, ifall första anropet kom för tidigt
+            setTimeout(() => { try { event.target.playVideo(); } catch(e){} }, 400);
           },
           onStateChange: onPlayerStateChange
         }
@@ -747,18 +925,34 @@
       const overlay = document.getElementById('start-overlay');
       overlay.style.background = '#0a0a0a';
       overlay.style.display = 'flex';
-      document.getElementById('start-icon').style.display = 'block';
+      document.getElementById('start-icon').style.display = 'flex';
       document.getElementById('start-text').style.display = 'block';
-      document.getElementById('start-icon').textContent = '▶';
       document.getElementById('start-text').textContent = 'Tryck för att starta';
     }
   }
 
+  function toggleCastInfo() {
+    const info = document.getElementById('cast-info');
+    info.style.display = info.style.display === 'block' ? 'none' : 'block';
+  }
+
   function openCurtains() {
-    document.querySelectorAll('.curtain').forEach(c => c.classList.add('open'));
+    document.querySelectorAll('.curtain').forEach(c => {
+      c.classList.remove('peek');
+      c.classList.add('open');
+    });
+  }
+  function peekCurtains() {
+    document.querySelectorAll('.curtain').forEach(c => {
+      c.classList.remove('open');
+      c.classList.add('peek');
+    });
   }
   function closeCurtains() {
-    document.querySelectorAll('.curtain').forEach(c => c.classList.remove('open'));
+    document.querySelectorAll('.curtain').forEach(c => {
+      c.classList.remove('open');
+      c.classList.remove('peek');
+    });
   }
 
   function startPlayback() {
