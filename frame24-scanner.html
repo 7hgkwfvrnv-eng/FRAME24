@@ -81,8 +81,10 @@
   #title-shield {
     position: absolute;
     top: 0; left: 0; right: 0;
-    height: 22%;
-    background: #0a0a0a;
+    height: 26%;
+    -webkit-backdrop-filter: blur(20px);
+    backdrop-filter: blur(20px);
+    background: rgba(10,10,10,0.25);
     z-index: 6;
     pointer-events: none;
     display: none;
@@ -459,7 +461,7 @@
           shieldShownForCurrentVideo = true;
           const shield = document.getElementById('title-shield');
           shield.style.display = 'block';
-          setTimeout(() => { shield.style.display = 'none'; }, 3000);
+          setTimeout(() => { shield.style.display = 'none'; }, 5000);
         }
       } catch (e) { /* ignorera om data inte är tillgänglig ännu */ }
 
