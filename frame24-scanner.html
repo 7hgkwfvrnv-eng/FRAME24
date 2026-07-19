@@ -488,20 +488,20 @@
   function onPlayerStateChange(event) {
     // YT.PlayerState: -1 ej startad, 0 avslutad, 1 spelar, 2 pausad, 3 buffrar, 5 köad
     // Så fort videon INTE aktivt spelar (t.ex. direkt efter att en reklamannons
-    // tagit slut och spelaren tillfälligt pausar) täcker vi skärmen igen så
-    // YouTubes egen titel/kontrollpanel aldrig hinner synas för spelarna.
+    // tagit slut och spelaren tillfälligt pausar/buffrar) täcker vi skärmen
+    // igen så YouTubes egen titel/kontrollpanel aldrig hinner synas.
     if (event.data === YT.PlayerState.PLAYING && userStarted) {
-      // Rutan görs osynlig men ligger kvar och fångar upp alla tryck, så
-      // ett tryck aldrig når YouTube-ytan direkt (vilket annars triggar
-      // YouTubes obligatoriska titel-/varumärkesruta). Detta sker bara
-      // EFTER att spelaren själv tryckt igång videon medvetet — inte
-      // bara för att den tysta autoplay-uppspelningen räknas som "playing".
       const overlay = document.getElementById('start-overlay');
       overlay.style.background = 'transparent';
       document.getElementById('start-icon').style.display = 'none';
       document.getElementById('start-text').style.display = 'none';
 
-      maybeShowTitleShield();
+      // Video-ID:t visade sig opålitligt för att skilja reklam från riktigt
+      // innehåll (YouTube rapporterar samma ID under reklamen också). Istället
+      // triggar vi blurren vid VARJE ny övergång till "spelar"-status efter
+      // tryckningen — det täcker både starten och (om reklam finns) exakt
+      // när reklamen slutar och trailern faktiskt börjar.
+      showTitleShield();
 
     } else if (document.getElementById('player-box').style.display === 'block') {
       const overlay = document.getElementById('start-overlay');
@@ -524,13 +524,8 @@
     document.getElementById('start-icon').style.display = 'none';
     document.getElementById('start-text').style.display = 'none';
     // Visa blur-listen direkt vid tryckningen, oavsett om videon har reklam
-    // eller inte — det täcker reklamfria videor som annars aldrig skulle
-    // trigga den statusbaserade kollen nedan.
+    // eller inte.
     showTitleShield();
-    // Kollar ÄVEN om det redan bekräftat är rätt video (för videor utan
-    // reklam går detta igenom direkt; annars väntar det på att reklamen
-    // ska ta slut, se onPlayerStateChange).
-    maybeShowTitleShield();
     if (document.getElementById('audioOnlyToggle').checked) {
       document.getElementById('audio-overlay').style.display = 'flex';
     }
