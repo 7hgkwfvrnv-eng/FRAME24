@@ -78,6 +78,14 @@
     position: absolute;
     inset: 0;
   }
+  #title-shield {
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 22%;
+    background: #0a0a0a;
+    z-index: 6;
+    pointer-events: none;
+  }
   #audio-overlay {
     position: absolute;
     inset: 0;
@@ -206,6 +214,7 @@
   <!-- Player -->
   <div id="player-box">
     <div id="yt-player"></div>
+    <div id="title-shield"></div>
     <div id="start-overlay" onclick="startPlayback()">
       <div id="start-icon">▶</div>
       <div id="start-text">Tryck för att starta</div>
