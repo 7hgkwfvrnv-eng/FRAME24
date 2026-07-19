@@ -4,43 +4,164 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Frame24</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&display=swap" rel="stylesheet">
 <script src="https://www.youtube.com/iframe_api"></script>
 <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
   html, body {
     height: 100%;
-    background: #0a0a0a;
+    background: radial-gradient(ellipse at 50% 30%, #1a1210 0%, #0a0605 55%, #050303 100%);
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
     color: #eee;
     overscroll-behavior: none;
   }
+  body::before {
+    /* Vinjettering — mörkare kanter, ljusare mitt */
+    content: '';
+    position: fixed;
+    inset: 0;
+    background: radial-gradient(ellipse at 50% 38%, transparent 35%, rgba(0,0,0,0.55) 85%, rgba(0,0,0,0.8) 100%);
+    pointer-events: none;
+    z-index: 3;
+  }
+
+  /* Biografgardiner på sidorna */
+  .curtain {
+    position: fixed;
+    top: 0; bottom: 0;
+    width: 11vw;
+    min-width: 40px;
+    max-width: 110px;
+    z-index: 0;
+    pointer-events: none;
+  }
+  .curtain.left { left: 0; }
+  .curtain.right { right: 0; transform: scaleX(-1); }
+  .curtain svg { width: 100%; height: 100%; display: block; }
+
   #wrap {
+    position: relative;
+    z-index: 1;
     min-height: 100%;
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    padding: 20px;
+    padding: 40px 20px;
   }
-  #logo {
-    font-size: 15px;
-    letter-spacing: 6px;
-    color: #c9a44c;
+  #logo-wrap {
+    margin: 8px 0 52px 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .fr-wordmark {
+    font-family: 'Cormorant Garamond', serif;
     font-weight: 700;
-    margin-bottom: 24px;
-    text-transform: uppercase;
+    font-size: 34px;
+    letter-spacing: 2px;
+    color: #efe9dc;
+    display: flex;
+    align-items: center;
   }
-  #logo span { color: #666; font-weight: 400; letter-spacing: 3px; }
+  .fr-reel {
+    position: relative;
+    width: 27px;
+    height: 37px;
+    margin: 0 1px;
+  }
+  .fr-reel .leg {
+    position: absolute;
+    top: 0; left: 11.5px;
+    width: 4px; height: 35px;
+    background: #efe9dc;
+    transform-origin: top center;
+  }
+  .fr-reel .leg.l { transform: rotate(-13deg); }
+  .fr-reel .leg.r { transform: rotate(13deg); }
+  .fr-reel .hub {
+    position: absolute;
+    top: 13px; left: 50%;
+    transform: translateX(-50%);
+    width: 17px; height: 17px;
+    border-radius: 50%;
+    background: #efe9dc;
+  }
+  .fr-reel .hub i {
+    position: absolute;
+    width: 3.8px; height: 3.8px;
+    border-radius: 50%;
+    background: #14100c;
+  }
+  .fr-sub {
+    font-family: 'Cormorant Garamond', serif;
+    font-size: 11px;
+    letter-spacing: 5px;
+    color: #8a7358;
+    text-align: center;
+    margin-top: 4px;
+  }
+
+  /* Scen runt bioduken: spotlight + ljusstrålar */
+  .screen-stage {
+    position: relative;
+    width: 100%;
+    max-width: 620px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+  .spotlight-cone {
+    position: absolute;
+    top: -180px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 480px;
+    height: 420px;
+    background: radial-gradient(ellipse at 50% 0%, rgba(255,244,214,0.16), rgba(255,244,214,0.05) 45%, transparent 72%);
+    filter: blur(4px);
+    pointer-events: none;
+    z-index: 0;
+  }
+  .light-rays {
+    position: absolute;
+    top: -260px;
+    left: 50%;
+    width: 700px;
+    height: 700px;
+    transform: translateX(-50%);
+    background: repeating-conic-gradient(from -18deg at 50% 0%,
+      rgba(255,244,214,0.05) 0deg 2deg,
+      transparent 2deg 6deg);
+    -webkit-mask-image: radial-gradient(ellipse at 50% 0%, black 0%, transparent 65%);
+    mask-image: radial-gradient(ellipse at 50% 0%, black 0%, transparent 65%);
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  /* Bioduks-ram: delad känsla för scanner- och spelarytan */
+  .cinema-screen {
+    box-shadow:
+      0 0 0 2px rgba(201,164,76,0.7),
+      0 0 70px rgba(255,244,214,0.22),
+      0 0 160px rgba(201,164,76,0.12),
+      0 40px 90px rgba(0,0,0,0.75);
+    border-radius: 14px;
+    position: relative;
+    z-index: 1;
+    transition: box-shadow 0.4s ease;
+  }
 
   /* Scanner view */
   #scan-box {
     width: 100%;
-    max-width: 480px;
+    max-width: 620px;
     aspect-ratio: 1;
-    background: #000;
-    border-radius: 12px;
-    border: 1px solid #2a2a2a;
+    background: linear-gradient(180deg, #f8f5ef 0%, #ece5d6 100%);
+    border-radius: 14px;
+    border: 2px solid #c9a44c;
     position: relative;
     overflow: hidden;
   }
@@ -51,15 +172,18 @@
     border: 2px solid #c9a44c;
     border-radius: 12px;
     pointer-events: none;
-    box-shadow: 0 0 0 2000px rgba(0,0,0,0.35);
+    box-shadow: 0 0 0 2000px rgba(10,6,5,0.5);
   }
   #scan-hint {
     position: absolute;
-    bottom: 14px; left: 0; right: 0;
+    bottom: 22px; left: 5%; right: 5%;
     text-align: center;
-    font-size: 13px;
-    color: #ddd;
-    text-shadow: 0 1px 3px #000;
+    font-family: 'Cormorant Garamond', serif;
+    font-size: 17px;
+    font-style: italic;
+    letter-spacing: 0.3px;
+    color: #efe9dc;
+    text-shadow: 0 2px 6px rgba(0,0,0,0.85);
   }
 
   /* Player view */
@@ -184,12 +308,21 @@
     margin-bottom: 8px;
   }
   #status {
-    font-size: 12px;
-    color: #888;
-    margin-top: 14px;
+    font-family: 'Cormorant Garamond', serif;
+    font-size: 14px;
+    font-style: italic;
+    color: #b8a888;
+    margin-top: 18px;
     max-width: 340px;
     text-align: center;
     line-height: 1.5;
+  }
+  @keyframes screenFadeIn {
+    from { opacity: 0; transform: scale(0.97) translateY(6px); }
+    to { opacity: 1; transform: scale(1) translateY(0); }
+  }
+  .screen-stage, #player-box {
+    animation: screenFadeIn 0.6s ease-out;
   }
   #title-reveal {
     margin-top: 16px;
@@ -201,23 +334,115 @@
 </style>
 </head>
 <body>
+<div class="curtain left">
+  <svg viewBox="0 0 100 800" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg">
+    <defs>
+      <linearGradient id="fold1" x1="0" y1="0" x2="1" y2="0">
+        <stop offset="0%" stop-color="#2b0308"/>
+        <stop offset="50%" stop-color="#8c1622"/>
+        <stop offset="100%" stop-color="#4a0810"/>
+      </linearGradient>
+      <linearGradient id="fold2" x1="0" y1="0" x2="1" y2="0">
+        <stop offset="0%" stop-color="#4a0810"/>
+        <stop offset="50%" stop-color="#a3202c"/>
+        <stop offset="100%" stop-color="#2b0308"/>
+      </linearGradient>
+      <linearGradient id="valanceGrad" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0%" stop-color="#5c0c14"/>
+        <stop offset="100%" stop-color="#2b0308"/>
+      </linearGradient>
+    </defs>
+    <rect x="0" y="0" width="17" height="800" fill="url(#fold1)"/>
+    <rect x="17" y="0" width="17" height="800" fill="url(#fold2)"/>
+    <rect x="34" y="0" width="17" height="800" fill="url(#fold1)"/>
+    <rect x="51" y="0" width="17" height="800" fill="url(#fold2)"/>
+    <rect x="68" y="0" width="16" height="800" fill="url(#fold1)"/>
+    <rect x="84" y="0" width="16" height="800" fill="url(#fold2)"/>
+    <path d="M0,0 L100,0 L100,55 Q84,80 68,55 Q51,85 34,55 Q17,80 0,55 Z" fill="url(#valanceGrad)"/>
+    <path d="M0,52 Q17,78 34,52 Q51,82 68,52 Q84,77 100,52" stroke="#c9a44c" stroke-width="1.5" fill="none" opacity="0.7"/>
+    <g opacity="0.85">
+      <circle cx="8" cy="770" r="3" fill="#c9a44c"/>
+      <circle cx="25" cy="782" r="3" fill="#c9a44c"/>
+      <circle cx="42" cy="770" r="3" fill="#c9a44c"/>
+      <circle cx="59" cy="782" r="3" fill="#c9a44c"/>
+      <circle cx="76" cy="770" r="3" fill="#c9a44c"/>
+      <circle cx="92" cy="782" r="3" fill="#c9a44c"/>
+    </g>
+  </svg>
+</div>
+<div class="curtain right">
+  <svg viewBox="0 0 100 800" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg">
+    <defs>
+      <linearGradient id="fold1r" x1="0" y1="0" x2="1" y2="0">
+        <stop offset="0%" stop-color="#2b0308"/>
+        <stop offset="50%" stop-color="#8c1622"/>
+        <stop offset="100%" stop-color="#4a0810"/>
+      </linearGradient>
+      <linearGradient id="fold2r" x1="0" y1="0" x2="1" y2="0">
+        <stop offset="0%" stop-color="#4a0810"/>
+        <stop offset="50%" stop-color="#a3202c"/>
+        <stop offset="100%" stop-color="#2b0308"/>
+      </linearGradient>
+      <linearGradient id="valanceGradR" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0%" stop-color="#5c0c14"/>
+        <stop offset="100%" stop-color="#2b0308"/>
+      </linearGradient>
+    </defs>
+    <rect x="0" y="0" width="17" height="800" fill="url(#fold1r)"/>
+    <rect x="17" y="0" width="17" height="800" fill="url(#fold2r)"/>
+    <rect x="34" y="0" width="17" height="800" fill="url(#fold1r)"/>
+    <rect x="51" y="0" width="17" height="800" fill="url(#fold2r)"/>
+    <rect x="68" y="0" width="16" height="800" fill="url(#fold1r)"/>
+    <rect x="84" y="0" width="16" height="800" fill="url(#fold2r)"/>
+    <path d="M0,0 L100,0 L100,55 Q84,80 68,55 Q51,85 34,55 Q17,80 0,55 Z" fill="url(#valanceGradR)"/>
+    <path d="M0,52 Q17,78 34,52 Q51,82 68,52 Q84,77 100,52" stroke="#c9a44c" stroke-width="1.5" fill="none" opacity="0.7"/>
+    <g opacity="0.85">
+      <circle cx="8" cy="770" r="3" fill="#c9a44c"/>
+      <circle cx="25" cy="782" r="3" fill="#c9a44c"/>
+      <circle cx="42" cy="770" r="3" fill="#c9a44c"/>
+      <circle cx="59" cy="782" r="3" fill="#c9a44c"/>
+      <circle cx="76" cy="770" r="3" fill="#c9a44c"/>
+      <circle cx="92" cy="782" r="3" fill="#c9a44c"/>
+    </g>
+  </svg>
+</div>
 <div id="wrap">
 
-  <div id="logo">FRAME<span>24</span></div>
+  <div id="logo-wrap">
+    <div>
+      <div class="fr-wordmark">
+        FR<div class="fr-reel">
+          <div class="leg l"></div>
+          <div class="leg r"></div>
+          <div class="hub">
+            <i style="top:2px; left:6.6px;"></i>
+            <i style="top:4.6px; left:10.6px;"></i>
+            <i style="top:9.5px; left:9.2px;"></i>
+            <i style="top:9.5px; left:3.6px;"></i>
+            <i style="top:4.6px; left:2.2px;"></i>
+            <i style="top:6.6px; left:6.4px; width:2.6px; height:2.6px;"></i>
+          </div>
+        </div>ME24
+      </div>
+      <div class="fr-sub">ETT FILMKUNSKAPSSPEL</div>
+    </div>
+  </div>
 
   <!-- Scanner -->
-  <div id="scan-view">
-    <div id="scan-box">
+  <div id="scan-view" class="screen-stage">
+    <div class="spotlight-cone"></div>
+    <div class="light-rays"></div>
+    <div id="scan-box" class="cinema-screen">
       <video id="scan-video" playsinline autoplay muted></video>
       <div id="scan-frame"></div>
-      <div id="scan-hint">Rikta mot kortets QR-kod</div>
+      <div id="scan-hint">Rikta kortets QR-kod mot bioduken<br>för att starta trailern</div>
     </div>
     <div id="status">Startar kameran...</div>
     <button id="retry-btn" style="display:none;" onclick="scanNext()">Försök igen</button>
   </div>
 
   <!-- Player -->
-  <div id="player-box">
+  <div id="player-box" class="cinema-screen">
     <div id="yt-player"></div>
     <div id="title-shield"></div>
     <div id="start-overlay" onclick="startPlayback()">
