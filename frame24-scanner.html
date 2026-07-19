@@ -425,6 +425,25 @@
     }
   });
 
+  window.addEventListener('message', (event) => {
+    if (typeof event.data !== 'string') return;
+    let data;
+    try { data = JSON.parse(event.data); } catch (e) { return; }
+    if (data.event !== 'onStateChange') return;
+
+    // YouTube-status: -1 ej startad, 0 avslutad, 1 spelar, 2 pausad, 3 buffrar, 5 köad
+    // Så fort videon INTE aktivt spelar (t.ex. direkt efter att en reklamannons
+    // tagit slut och spelaren tillfälligt pausar) täcker vi skärmen igen så
+    // YouTubes egen titel/kontrollpanel aldrig hinner synas för spelarna.
+    if (data.info === 1) {
+      document.getElementById('start-overlay').style.display = 'none';
+    } else if (document.getElementById('player-box').style.display === 'block') {
+      document.getElementById('start-icon').textContent = '▶';
+      document.getElementById('start-text').textContent = 'Tryck för att starta';
+      document.getElementById('start-overlay').style.display = 'flex';
+    }
+  });
+
   window.addEventListener('beforeunload', stopCamera);
 </script>
 
