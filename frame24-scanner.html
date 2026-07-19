@@ -85,6 +85,7 @@
     background: #0a0a0a;
     z-index: 6;
     pointer-events: none;
+    display: none;
   }
   #audio-overlay {
     position: absolute;
@@ -379,6 +380,7 @@
   let ytPlayer = null;
   let ytApiReady = false;
   let userStarted = false;
+  let shieldShownForCurrentVideo = false;
 
   window.onYouTubeIframeAPIReady = function () {
     ytApiReady = true;
@@ -387,6 +389,8 @@
   function playVideo(id) {
     currentVideoId = id;
     userStarted = false;
+    shieldShownForCurrentVideo = false;
+    document.getElementById('title-shield').style.display = 'none';
     document.getElementById('scan-view').style.display = 'none';
     document.getElementById('player-box').style.display = 'block';
     document.getElementById('title-reveal').textContent = 'Gissa året — vänd sen på kortet för facit';
@@ -445,6 +449,20 @@
       overlay.style.background = 'transparent';
       document.getElementById('start-icon').style.display = 'none';
       document.getElementById('start-text').style.display = 'none';
+
+      // Kolla om det faktiskt är RÄTT video som spelar (inte en reklamannons
+      // — annonser har ett annat video-ID än det vi bad om). Visa då
+      // titel-listen i 3 sekunder, exakt när den riktiga trailern startar.
+      try {
+        const data = ytPlayer.getVideoData();
+        if (!shieldShownForCurrentVideo && data && data.video_id === currentVideoId) {
+          shieldShownForCurrentVideo = true;
+          const shield = document.getElementById('title-shield');
+          shield.style.display = 'block';
+          setTimeout(() => { shield.style.display = 'none'; }, 3000);
+        }
+      } catch (e) { /* ignorera om data inte är tillgänglig ännu */ }
+
     } else if (document.getElementById('player-box').style.display === 'block') {
       const overlay = document.getElementById('start-overlay');
       overlay.style.background = '#0a0a0a';
@@ -484,6 +502,7 @@
     document.getElementById('next-btn').style.display = 'none';
     document.getElementById('start-overlay').style.display = 'none';
     document.getElementById('audio-overlay').style.display = 'none';
+    document.getElementById('title-shield').style.display = 'none';
     currentVideoId = null;
     document.getElementById('scan-view').style.display = 'block';
     document.getElementById('status').textContent = 'Startar kameran...';
