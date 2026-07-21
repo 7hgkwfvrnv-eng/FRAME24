@@ -321,6 +321,50 @@
     text-transform: uppercase;
     color: #888;
   }
+  /* Temad felruta — läggs ovanpå YouTubes råa "ej tillgänglig"-box när
+     spelaren rapporterar onError. Täcker hela player-box (z-index över
+     title-shield) och pekar ut felkod + video-ID. Rör inte blur/PLAYING. */
+  #error-overlay {
+    position: absolute;
+    inset: 0;
+    background: #0a0a0a;
+    display: none;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    padding: 24px;
+    cursor: pointer;
+    z-index: 7;
+  }
+  #error-overlay-icon { width: 54px; height: 54px; margin-bottom: 14px; }
+  #error-overlay-icon svg { width: 100%; height: 100%; }
+  #error-overlay-title {
+    font-family: 'Cormorant Garamond', serif;
+    font-size: 20px;
+    font-style: italic;
+    letter-spacing: 0.5px;
+    color: #efe9dc;
+    margin-bottom: 6px;
+  }
+  #error-overlay-sub {
+    font-size: 12px;
+    letter-spacing: 1px;
+    color: #8a7358;
+    margin-bottom: 16px;
+  }
+  #error-overlay-detail {
+    font-family: monospace;
+    font-size: 11px;
+    letter-spacing: 0.5px;
+    color: #6a6a6a;
+    background: rgba(255,255,255,0.03);
+    border: 1px solid #222;
+    border-radius: 5px;
+    padding: 6px 10px;
+    max-width: 90%;
+    word-break: break-all;
+  }
   /* Döljer YouTubes UI/annonser under buffring — visas automatiskt, ingen tryckning krävs */
   #buffer-overlay {
     position: absolute;
@@ -671,6 +715,18 @@
       <div id="audio-overlay-icon">♪</div>
       <div id="audio-overlay-text">Endast ljud — gissa filmen</div>
     </div>
+    <div id="error-overlay" onclick="scanNext()">
+      <div id="error-overlay-icon">
+        <svg viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg">
+          <circle cx="32" cy="32" r="29" fill="none" stroke="#c9a44c" stroke-width="1.5" opacity="0.5"/>
+          <line x1="32" y1="18" x2="32" y2="36" stroke="#c9a44c" stroke-width="3.2" stroke-linecap="round"/>
+          <circle cx="32" cy="45" r="2.4" fill="#c9a44c"/>
+        </svg>
+      </div>
+      <div id="error-overlay-title">Trailern kunde inte spelas</div>
+      <div id="error-overlay-sub">Tryck för nästa kort — byt nät om flera strular</div>
+      <div id="error-overlay-detail">—</div>
+    </div>
   </div>
 
   <div id="mode-row">
@@ -961,6 +1017,7 @@
     document.getElementById('next-btn').style.display = 'inline-block';
     document.getElementById('audio-overlay').style.display = 'none';
     document.getElementById('buffer-overlay').style.display = 'none';
+    document.getElementById('error-overlay').style.display = 'none';
     document.getElementById('tap-to-play').style.display = 'flex';
 
     const playerVars = {
@@ -993,7 +1050,8 @@
             playerReady = true;
             if (wantPlay) startPlaybackNow(); // trycket kom före redo — spela nu
           },
-          onStateChange: onPlayerStateChange
+          onStateChange: onPlayerStateChange,
+          onError: onPlayerError
         }
       });
     } else if (!ytApiReady) {
@@ -1061,6 +1119,37 @@
     }
   }
 
+  // YouTube-spelaren rapporterade ett fel för det aktuella klippet. Vi visar en
+  // temad felruta ovanpå YouTubes råa "ej tillgänglig"-box och pekar ut felkod
+  // + video-ID. Ingen trailer kommer att spelas (PLAYING inträffar aldrig), så
+  // blur-tillståndsmaskinen lämnas orörd i AD och nollställs vid nästa kort.
+  function onPlayerError(event) {
+    // Felkoder: 2 = ogiltigt video-ID · 5 = HTML5-uppspelningsfel ·
+    // 100 = borttagen/privat · 101 & 150 = inbäddning avstängd av ägaren.
+    const code = event && event.data;
+    const reasons = {
+      2:   'ogiltigt video-ID',
+      5:   'uppspelningsfel i spelaren',
+      100: 'borttagen eller privat',
+      101: 'inbäddning avstängd',
+      150: 'inbäddning avstängd'
+    };
+    const reason = reasons[code] || 'okänt fel';
+    const vid = currentVideoId || (pendingClip && pendingClip.id) || '—';
+    try { console.log('[Frame24] FEL ' + code + ' (' + reason + ') \u00b7 video ' + vid); } catch (e) {}
+
+    // Dölj övriga overlays så felrutan står ensam, fyll i felkod + ID, och visa.
+    document.getElementById('buffer-overlay').style.display = 'none';
+    document.getElementById('tap-to-play').style.display = 'none';
+    document.getElementById('audio-overlay').style.display = 'none';
+    document.getElementById('error-overlay-detail').textContent =
+      'Fel ' + (code != null ? code : '?') + ' \u00b7 ' + reason + ' \u00b7 ' + vid;
+    document.getElementById('error-overlay').style.display = 'flex';
+    // Garantera "Nästa kort"-knappen (sätts redan i playVideo, men om felet
+    // kom mycket tidigt säkrar vi den här).
+    document.getElementById('next-btn').style.display = 'inline-block';
+  }
+
   function toggleCastInfo() {
     const info = document.getElementById('cast-info');
     info.style.display = info.style.display === 'block' ? 'none' : 'block';
@@ -1105,6 +1194,7 @@
     document.getElementById('buffer-overlay').style.display = 'none';
     document.getElementById('tap-to-play').style.display = 'none';
     document.getElementById('audio-overlay').style.display = 'none';
+    document.getElementById('error-overlay').style.display = 'none';
     hideShield();
     currentVideoId = null;
     pendingClip = null;
