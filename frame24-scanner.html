@@ -881,13 +881,14 @@
     blurState = next;
   }
 
-  // Nollställ till AD + blur PÅ vid varje ny video, och avbryt ev. gammal timer.
+  // Nollställ till AD vid varje ny video (blur AV under annonserna), och
+  // avbryt ev. gammal timer.
   function resetBlurForNewVideo() {
     clearGrace();
     graceRemaining = TRAILER_BLUR_GRACE_MS;
     setBlurState('AD');
-    showShield();
-    logBlur('ny video: AD, blur PÅ');
+    hideShield();                 // ingen blur under annonssekvensen
+    logBlur('ny video: AD, blur AV (annons)');
   }
 
   // AD → TRAILER_DETECTED. Anropas av identifieringssignalen (PLAYING-eventet
@@ -896,6 +897,7 @@
   function onTrailerDetected() {
     if (blurState !== 'AD') return;
     setBlurState('TRAILER_DETECTED');
+    showShield();                 // trailern har börjat → lägg på blurren nu
     graceRemaining = TRAILER_BLUR_GRACE_MS;
     armGrace();
   }
@@ -931,8 +933,9 @@
   //  === PLAYING (se onPlayerStateChange). Mätdata visar att annonser ligger
   //  i UNSTARTED/BUFFERING och att ENBART trailern rapporterar PLAYING, så
   //  ingen pollning behövs. currentClipStart sparas bara för loggningen.
-  //  Fail-safe: inträffar aldrig PLAYING → onTrailerDetected() anropas aldrig
-  //  → blurState stannar i AD → blurren ligger kvar hela videon.
+  //  Fail-safe: inträffar aldrig PLAYING spelar trailern aldrig → ingen titel
+  //  visas → ingen blur behövs (blurren slås bara på när PLAYING bekräftar
+  //  att trailern faktiskt rullar).
   let currentClipStart = 0;
 
   function startContentWatch() { /* ersatt av PLAYING-eventet — behålls som no-op */ }
