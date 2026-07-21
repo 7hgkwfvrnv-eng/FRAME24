@@ -346,9 +346,11 @@
   @media (prefers-reduced-motion: reduce) {
     #buffer-spinner { animation: none; }
   }
-  /* Visas ENDAST om vi redan vet att webbläsaren kräver en tryckning för
-     ljud (t.ex. Safari på iPhone) — en avsiktlig, snygg vy istället för
-     en låtsad väntan som sen ger upp. */
+  /* Den enda skärm som visas per kort — en medveten, snygg tryckning som
+     GARANTERAR att webbläsaren tillåter ljud (både Chrome och Safari kräver
+     att play-med-ljud sker som en direkt, synkron följd av en klickhändelse)
+     OCH att blurren nedan hinner läggas på plats innan en enda bildruta av
+     den riktiga trailern visas. */
   #tap-to-play {
     position: absolute;
     inset: 0;
@@ -386,40 +388,6 @@
     border-radius: 20px;
     font-weight: 700;
     text-transform: uppercase;
-  }
-  /* Engångsskärm — väcker ljud+kamera med en enda tryckning för hela kvällen */
-  #session-gate {
-    position: fixed;
-    inset: 0;
-    z-index: 20;
-    background: radial-gradient(ellipse at 50% 30%, #1a1210 0%, #0a0605 55%, #050303 100%);
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    text-align: center;
-    padding: 20px;
-  }
-  #session-gate-sub {
-    font-family: 'Cormorant Garamond', serif;
-    font-size: 11px;
-    letter-spacing: 5px;
-    color: #8a7358;
-    margin-top: 4px;
-    margin-bottom: 44px;
-  }
-  #session-gate-btn {
-    padding: 15px 34px;
-    font-size: 14px;
-    margin-top: 0;
-  }
-  #session-gate-hint {
-    margin-top: 18px;
-    font-family: 'Cormorant Garamond', serif;
-    font-size: 13px;
-    font-style: italic;
-    color: #8a7358;
-    line-height: 1.6;
   }
     cursor: pointer;
     user-select: none;
@@ -639,25 +607,7 @@
     </g>
   </svg>
 </div>
-<div id="session-gate">
-  <div class="fr-wordmark" style="font-size:30px;">
-    FR<div class="fr-reel">
-      <div class="leg l"></div>
-      <div class="leg r"></div>
-      <div class="hub">
-        <i style="top:2px; left:6.6px;"></i>
-        <i style="top:4.6px; left:10.6px;"></i>
-        <i style="top:9.5px; left:9.2px;"></i>
-        <i style="top:9.5px; left:3.6px;"></i>
-        <i style="top:4.6px; left:2.2px;"></i>
-        <i style="top:6.6px; left:6.4px; width:2.6px; height:2.6px;"></i>
-      </div>
-    </div>ME24
-  </div>
-  <div id="session-gate-sub">ETT FILMKUNSKAPSSPEL</div>
-  <button id="session-gate-btn" onclick="beginSession()">Starta spelkvällen</button>
-  <div id="session-gate-hint">Startar kameran och väcker ljudet —<br>behövs bara denna enda gång.</div>
-</div>
+
 <div id="wrap">
 
   <div id="logo-wrap">
@@ -689,7 +639,7 @@
       <div id="scan-frame"></div>
       <div id="scan-hint">Rikta kortets QR-kod mot bioduken<br>för att starta trailern</div>
     </div>
-    <div id="status">Tryck på "Starta spelkvällen" ovan för att börja</div>
+    <div id="status">Startar kameran...</div>
     <button id="retry-btn" style="display:none;" onclick="scanNext()">Försök igen</button>
   </div>
 
@@ -701,14 +651,14 @@
       <div id="buffer-spinner"></div>
       <div id="buffer-text">Laddar trailer …</div>
     </div>
-    <div id="tap-to-play" onclick="tapToPlay()">
+    <div id="tap-to-play" onclick="revealCard()">
       <div id="tap-to-play-icon">
         <svg viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg">
           <circle cx="32" cy="32" r="30" fill="none" stroke="#c9a44c" stroke-width="1.5" opacity="0.55"/>
           <path d="M26 20 L46 32 L26 44 Z" fill="#c9a44c"/>
         </svg>
       </div>
-      <div id="tap-to-play-text">Tryck för att spela</div>
+      <div id="tap-to-play-text">Visa filmen</div>
     </div>
     <div id="audio-overlay">
       <div id="audio-overlay-icon">♪</div>
@@ -891,13 +841,8 @@
   let currentVideoId = null;
   let ytPlayer = null;
   let ytApiReady = false;
-  let revealedForCurrentVideo = false;
   let shieldTimer = null;
-  // Lärs in under kvällen: vet vi redan att den här webbläsaren blockerar
-  // automatiskt ljud (t.ex. Safari på iPhone)? Om så, hoppar vi över det
-  // låtsade laddningsläget för alla kommande kort och visar tryck-knappen
-  // direkt istället.
-  let autoplayLikelyBlocked = false;
+  let pendingClip = null; // { id, start, end } — satt av playVideo(), konsumeras av revealCard()
 
   function showTitleShield() {
     const shield = document.getElementById('title-shield');
@@ -911,14 +856,39 @@
   };
 
   function playVideo(id, start, end) {
-    currentVideoId = id;
-    revealedForCurrentVideo = false;
+    // Kortet är scannat — men vi laddar INTE videon än. Vi väntar på en
+    // medveten tryckning (revealCard) så att play-med-ljud sker som en
+    // direkt, synkron följd av en klickhändelse. Det är det enda sättet
+    // webbläsare (särskilt Safari) tillförlitligt tillåter ljud, OCH det
+    // enda sättet vi kan garantera att blurren ligger på plats innan en
+    // enda bildruta hinner visas.
+    pendingClip = { id: id, start: start, end: end };
     document.getElementById('title-shield').style.display = 'none';
     document.getElementById('scan-view').style.display = 'none';
     document.getElementById('player-box').style.display = 'block';
-    document.getElementById('title-reveal').textContent = 'Gissa året — vänd sen på kortet för facit';
+    document.getElementById('title-reveal').textContent = '';
     document.getElementById('next-btn').style.display = 'inline-block';
     document.getElementById('audio-overlay').style.display = 'none';
+    document.getElementById('buffer-overlay').style.display = 'none';
+    document.getElementById('tap-to-play').style.display = 'flex';
+  }
+
+  function revealCard() {
+    if (!pendingClip) return;
+    const clip = pendingClip;
+    currentVideoId = clip.id;
+    document.getElementById('tap-to-play').style.display = 'none';
+    document.getElementById('title-reveal').textContent = 'Gissa året — vänd sen på kortet för facit';
+
+    // ALLT nedan sker synkront, i samma klickhändelse:
+    // 1) Ridåerna öppnas och blurren läggs på DIREKT — innan videon ens
+    //    hunnit be webbläsaren om en bildruta. Ingen risk att titeln
+    //    hinner synas.
+    // 2) Uppspelning med ljud begärs som en direkt följd av tryckningen,
+    //    vilket både Chrome och Safari tillåter.
+    openCurtains();
+    showTitleShield();
+    document.getElementById('buffer-overlay').style.display = ytPlayer ? 'none' : 'flex';
 
     const playerVars = {
       autoplay: 1,
@@ -931,96 +901,55 @@
       playsinline: 1,
       disablekb: 1
     };
-    if (start) playerVars.start = start;
-    if (end) playerVars.end = end;
-
-    if (autoplayLikelyBlocked) {
-      // Vi vet redan att ett tryck krävs — visa knappen direkt, ingen
-      // låtsad väntan som ändå bara skulle sluta här.
-      document.getElementById('buffer-overlay').style.display = 'none';
-      document.getElementById('tap-to-play').style.display = 'flex';
-    } else {
-      document.getElementById('buffer-overlay').style.display = 'flex';
-      document.getElementById('tap-to-play').style.display = 'none';
-    }
+    if (clip.start) playerVars.start = clip.start;
+    if (clip.end) playerVars.end = clip.end;
 
     if (ytPlayer) {
-      // Återanvänd samma spelarinstans — samma <video>-element som
-      // webbläsaren redan godkänt för ljuduppspelning tidigare i sessionen
-      // (tack vare "Starta spelkvällen"-tryckningen) får fortsätta göra det.
-      const loadOpts = { videoId: id };
-      if (start) loadOpts.startSeconds = start;
-      if (end) loadOpts.endSeconds = end;
+      const loadOpts = { videoId: clip.id };
+      if (clip.start) loadOpts.startSeconds = clip.start;
+      if (clip.end) loadOpts.endSeconds = clip.end;
       ytPlayer.loadVideoById(loadOpts);
-      if (!autoplayLikelyBlocked) {
-        ytPlayer.playVideo();
-        scheduleAutoplayFallbackCheck();
-      }
+      ytPlayer.playVideo();
     } else if (ytApiReady && typeof YT !== 'undefined') {
       ytPlayer = new YT.Player('yt-player', {
-        videoId: id,
+        videoId: clip.id,
         playerVars: playerVars,
         events: {
           onReady: function (event) {
-            if (!autoplayLikelyBlocked) {
-              event.target.playVideo();
-              // Extra försök strax efter, ifall första anropet kom för tidigt
-              setTimeout(() => { try { event.target.playVideo(); } catch(e){} }, 300);
-              scheduleAutoplayFallbackCheck();
-            }
+            document.getElementById('buffer-overlay').style.display = 'none';
+            event.target.playVideo();
           },
           onStateChange: onPlayerStateChange
         }
       });
     } else {
-      // API:et hann inte ladda klart — försök igen om en liten stund
-      setTimeout(() => playVideo(id, start, end), 300);
+      // API:et hann inte ladda klart — mycket ovanligt, men försök igen
+      setTimeout(revealCard, 300);
     }
-  }
 
-  function scheduleAutoplayFallbackCheck() {
-    // Blockering (om den sker) avgörs direkt av webbläsaren — det är ingen
-    // fråga om uppkopplingshastighet. Så snart, inte 1+ sekund "låtsasladdning".
-    setTimeout(() => {
-      try {
-        if (ytPlayer && ytPlayer.getPlayerState() !== YT.PlayerState.PLAYING) {
-          autoplayLikelyBlocked = true; // gäller resten av kvällen
-          document.getElementById('buffer-overlay').style.display = 'none';
-          document.getElementById('tap-to-play').style.display = 'flex';
-        }
-      } catch (e) {}
-    }, 500);
-  }
-
-  function tapToPlay() {
-    if (!ytPlayer) return;
-    document.getElementById('tap-to-play').style.display = 'none';
-    try { ytPlayer.playVideo(); } catch (e) {}
+    if (document.getElementById('audioOnlyToggle').checked) {
+      document.getElementById('audio-overlay').style.display = 'flex';
+    }
   }
 
   function onPlayerStateChange(event) {
     // YT.PlayerState: -1 ej startad, 0 avslutad, 1 spelar, 2 pausad, 3 buffrar, 5 köad
     if (event.data === YT.PlayerState.PLAYING) {
-      // Blurren döljer bara YouTubes egen info-list (titel/kanal/dela-knapp)
-      // som annars visas vid start — INTE annonsens eget innehåll eller dess
-      // "Hoppa över"-knapp. Vi kan inte skilja annons från riktigt innehåll
-      // helt tillförlitligt (YouTube rapporterar ibland samma status för
-      // båda), så vi triggar den direkt och synkront vid varje övergång
-      // till "spelar" — annars hinner titeln synas oblurrad innan den
-      // täcks, vilket avslöjar filmen i förtid.
+      document.getElementById('buffer-overlay').style.display = 'none';
+      // Lägger på blurren DIREKT och synkront, varje gång spelaren går till
+      // "spelar" — inte bara en gång. Det täcker både "raka spåret" (ingen
+      // annons, redan täckt av revealCard()) och övergången annons→trailer.
+      // Att vänta och först KOLLA vilket video-ID som faktiskt spelar
+      // (vilket vi testade) var för långsamt — YouTubes egen metadata
+      // uppdateras med märkbar fördröjning efter en annons, vilket gav en
+      // lucka där titeln hann synas. Att blurra blint på varje övergång är
+      // den enda metod som är lika snabb som tryckningen själv. Blurren är
+      // dessutom bara en halvgenomskinlig remsa högst upp — den döljer
+      // aldrig annonsen i sig eller dess "Hoppa över"-knapp.
       showTitleShield();
-
-      if (!revealedForCurrentVideo) {
-        revealedForCurrentVideo = true;
-        document.getElementById('buffer-overlay').style.display = 'none';
-        document.getElementById('tap-to-play').style.display = 'none';
-        openCurtains();
-        if (document.getElementById('audioOnlyToggle').checked) {
-          document.getElementById('audio-overlay').style.display = 'flex';
-        }
-      }
     }
   }
+
 
   function toggleCastInfo() {
     const info = document.getElementById('cast-info');
@@ -1064,16 +993,9 @@
     document.getElementById('audio-overlay').style.display = 'none';
     document.getElementById('title-shield').style.display = 'none';
     currentVideoId = null;
+    pendingClip = null;
     document.getElementById('scan-view').style.display = 'block';
     document.getElementById('status').textContent = 'Startar kameran...';
-    startCamera();
-  }
-
-  function beginSession() {
-    // Den enda tryckning som krävs under hela kvällen. Ger webbläsaren en
-    // äkta användargest att utgå från, vilket sedan tillåter automatisk
-    // ljuduppspelning för alla efterföljande kort.
-    document.getElementById('session-gate').style.display = 'none';
     startCamera();
   }
 
@@ -1082,12 +1004,12 @@
     const params = new URLSearchParams(window.location.search);
     const idParam = params.get('id');
     if (idParam) {
-      document.getElementById('session-gate').style.display = 'none';
       const start = params.get('start') ? parseInt(params.get('start'), 10) : null;
       const end = params.get('end') ? parseInt(params.get('end'), 10) : null;
       playVideo(extractId(idParam) || idParam, start, end);
+    } else {
+      startCamera();
     }
-    // annars väntar vi på tryckningen på "Starta spelkvällen"
   });
 
   window.addEventListener('beforeunload', stopCamera);
