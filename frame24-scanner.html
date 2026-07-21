@@ -851,16 +851,84 @@
   let pendingClip = null;   // { id, start, end } — satt av playVideo(), konsumeras av revealCard()
   let wantPlay = false;     // satt om tryckningen sker innan spelaren hunnit bli redo
 
-  function showShield() {
-    document.getElementById('title-shield').style.display = 'block';
-  }
-  function hideShield() {
-    document.getElementById('title-shield').style.display = 'none';
+  // ---------------------------------------------------------------------
+  //  Blur-tillståndsmaskin (titel-ytan #title-shield)
+  //
+  //  #title-shield är den lilla positionerade blur-ytan högst upp som döljer
+  //  titel/logga. SAMMA komponent i alla lägen — ingen ny byggs.
+  //
+  //    AD               – annons spelas, trailern ej identifierad. Blur PÅ.
+  //                       (Starttillstånd för varje ny video. Fail-safe.)
+  //    TRAILER_DETECTED – trailern just identifierad. Blur PÅ, timer startar.
+  //    TRAILER_VISIBLE  – TRAILER_BLUR_GRACE_MS efter identifiering. Blur AV.
+  // ---------------------------------------------------------------------
+  const TRAILER_BLUR_GRACE_MS = 4000; // justerbar: hur länge blurren ligger kvar efter identifiering
+
+  let blurState = 'AD';
+  let graceTimerId = null;
+  let graceRemaining = TRAILER_BLUR_GRACE_MS; // ms kvar (pausas i bakgrund/paus)
+  let graceRunStart = 0;                      // när nuvarande timer-körning startade
+
+  function logBlur(msg) { try { console.log('[Frame24 blur] ' + msg); } catch (e) {} }
+
+  function showShield() { document.getElementById('title-shield').style.display = 'block'; }
+  function hideShield() { document.getElementById('title-shield').style.display = 'none'; }
+
+  function setBlurState(next) {
+    if (blurState === next) return;
+    logBlur(blurState + ' \u2192 ' + next);   // logga varje övergång (fältfelsökning)
+    blurState = next;
   }
 
-  // ---- Bevakning: identifiera när den RIKTIGA trailern spelar, håll sen
-  //      blurren kvar i 4 sekunder till (för att täcka YouTubes titel-list
-  //      som visas i början), och ta först därefter bort den. ----
+  // Nollställ till AD + blur PÅ vid varje ny video, och avbryt ev. gammal timer.
+  function resetBlurForNewVideo() {
+    clearGrace();
+    graceRemaining = TRAILER_BLUR_GRACE_MS;
+    setBlurState('AD');
+    showShield();
+    logBlur('ny video: AD, blur PÅ');
+  }
+
+  // AD → TRAILER_DETECTED. Anropas av den befintliga identifieringssignalen
+  // (se contentWatchTick). Första positiva träffen är definitiv för videon —
+  // efterföljande träffar ignoreras eftersom vi då inte längre är i AD.
+  function onTrailerDetected() {
+    if (blurState !== 'AD') return;
+    setBlurState('TRAILER_DETECTED');
+    graceRemaining = TRAILER_BLUR_GRACE_MS;
+    armGrace();
+  }
+
+  // Tidsstämpel-baserad timer (setTimeout), pausbar. Räknar faktisk
+  // uppspelningstid — pausas i bakgrund/vid paus och återupptas sen, så att
+  // blurren aldrig slås av pga tid som gått medan videon stod still.
+  function armGrace() {
+    if (graceTimerId !== null) return;      // redan igång
+    if (graceRemaining <= 0) { onGraceExpired(); return; }
+    graceRunStart = Date.now();
+    graceTimerId = setTimeout(onGraceExpired, graceRemaining);
+  }
+  function pauseGrace() {
+    if (graceTimerId === null) return;
+    clearTimeout(graceTimerId); graceTimerId = null;
+    graceRemaining = Math.max(0, graceRemaining - (Date.now() - graceRunStart));
+    logBlur('timer pausad, ' + graceRemaining + ' ms kvar');
+  }
+  function clearGrace() {
+    if (graceTimerId !== null) { clearTimeout(graceTimerId); graceTimerId = null; }
+  }
+  // TRAILER_DETECTED → TRAILER_VISIBLE. Triggas ENBART av att timern löper ut.
+  function onGraceExpired() {
+    graceTimerId = null;
+    if (blurState !== 'TRAILER_DETECTED') return;
+    setBlurState('TRAILER_VISIBLE');
+    hideShield();
+  }
+
+  // ---- Befintlig identifieringssignal (oförändrad algoritm) ----
+  //  Avgör NÄR videon som spelas är den riktiga trailern och anropar då
+  //  onTrailerDetected(). Detektionen byggs inte om — dess utslag matas bara
+  //  in i tillståndsmaskinen ovan.
   let currentClipStart = 0;
   let watchActive = false;
   let wPlayStart = 0;      // när uppspelningen begärdes
@@ -868,7 +936,6 @@
   let wFirstMax = 0;       // högsta positionen under de första 600 ms
   let wFirstT = null;      // "startposition" (låst efter 600 ms)
   let wSawJump = false;    // har vi sett ett bakåthopp (= det fanns en annons)?
-  let wConfirmedAt = null; // när den riktiga trailern bekräftades
 
   function startContentWatch() {
     watchActive = true;
@@ -877,7 +944,6 @@
     wFirstMax = 0;
     wFirstT = null;
     wSawJump = false;
-    wConfirmedAt = null;
     requestAnimationFrame(contentWatchTick);
   }
   function stopContentWatch() {
@@ -886,7 +952,11 @@
 
   function contentWatchTick() {
     if (!watchActive) return;
-    if (Date.now() - wPlayStart > 60000) { watchActive = false; return; } // säkerhetstak
+    // Sluta leta så fort trailern identifierats — då sköter timern resten.
+    if (blurState !== 'AD') { watchActive = false; return; }
+    // Fail-safe-tak: om identifiering aldrig sker letar vi i högst 3 min och
+    // slutar sen — blurren ligger kvar (state = AD) hela videon.
+    if (Date.now() - wPlayStart > 180000) { watchActive = false; return; }
 
     let t = null;
     try { t = ytPlayer.getCurrentTime(); } catch (e) {}
@@ -894,50 +964,34 @@
     if (typeof t === 'number' && isFinite(t)) {
       const elapsed = Date.now() - wPlayStart;
 
-      // Lås "startpositionen": högsta positionen vi ser under de första
-      // 600 ms. Den RIKTIGA trailern är klippt att börja vid currentClipStart
-      // (t.ex. 20s), så den når snabbt dit. En annons börjar alltid från ~0
-      // och hinner bara till ~0.6s på samma tid. Det skiljer dem åt direkt,
-      // utan den fördröjning som video-ID-metadatan hade.
+      // Lås "startpositionen": högsta positionen under de första 600 ms.
+      // Den RIKTIGA trailern är klippt att börja vid currentClipStart (t.ex.
+      // 20s) och når snabbt dit; en annons börjar vid ~0 och hinner bara till
+      // ~0.6s på samma tid. Det skiljer dem åt direkt.
       if (elapsed <= 600) {
         if (t > wFirstMax) wFirstMax = t;
       } else if (wFirstT === null) {
         wFirstT = wFirstMax;
       }
 
-      // Bakåthopp = ett klipp (en annons) tog just slut och ett nytt började.
-      // Blurren ligger redan på (den togs aldrig bort under annonsen), så
-      // detta ger ingen blinkning — vi bara (om)startar 4-sekundersfönstret
-      // vid det nya klippets början.
+      // Bakåthopp = annons slut, nytt klipp började → identifieringssignal.
       if (wLastT !== null && t < wLastT - 0.5) {
         wSawJump = true;
-        wConfirmedAt = Date.now();
-        showShield();
+        onTrailerDetected();
       }
       wLastT = t;
 
-      // Bekräfta den riktiga trailern (om vi inte redan gjort det via ett hopp):
-      if (wConfirmedAt === null && !wSawJump && wFirstT !== null) {
+      // Positionsbaserad identifiering (ingen annons: trailern börjar direkt
+      // vid sin klipp-position).
+      if (!wSawJump && wFirstT !== null) {
         if (currentClipStart >= 5) {
-          // Startpositionen avslöjar direkt om uppspelningen började vid
-          // trailerns klipp-position (ingen annons) eller vid ~0 (annons).
-          if (wFirstT >= currentClipStart - 1.5) {
-            wConfirmedAt = Date.now();       // började vid trailern → ingen annons
-          }
-          // annars: började vid ~0 → annons spelar → vänta på bakåthoppet
+          if (wFirstT >= currentClipStart - 1.5) onTrailerDetected();
         } else {
           // Klipp utan meningsfull startsekund — positionen kan inte skilja
           // annons från trailer. Vänta 6s; en eventuell annons hinner oftast
-          // ta slut (och ge ett bakåthopp) inom den tiden.
-          if (elapsed > 6000) wConfirmedAt = Date.now();
+          // ta slut (ge ett bakåthopp) inom den tiden.
+          if (elapsed > 6000) onTrailerDetected();
         }
-      }
-
-      // Ta bort blurren 4 sekunder efter att den riktiga trailern bekräftats.
-      if (wConfirmedAt !== null && Date.now() - wConfirmedAt >= 4000) {
-        hideShield();
-        watchActive = false;
-        return;
       }
     }
     requestAnimationFrame(contentWatchTick);
@@ -1013,12 +1067,10 @@
     document.getElementById('title-reveal').textContent = 'Gissa året — vänd sen på kortet för facit';
 
     // Synkront, i samma tryckhändelse: ridåerna öppnas och blurren läggs på
-    // INNAN videon börjar. Blurren tas INTE bort förrän vi bekräftat att den
-    // riktiga trailern spelar — och då först efter ytterligare 4 sekunder.
-    // Eftersom den ligger kvar oavbrutet genom en eventuell annons fram tills
-    // dess, finns ingen lucka där titeln kan blinka fram.
+    // (tillståndsmaskinen nollställs till AD, blur PÅ) INNAN videon börjar.
+    // Blurren tas inte bort förrän trailern identifierats + TRAILER_BLUR_GRACE_MS.
     openCurtains();
-    showShield();
+    resetBlurForNewVideo();
     if (document.getElementById('audioOnlyToggle').checked) {
       document.getElementById('audio-overlay').style.display = 'flex';
     }
@@ -1050,8 +1102,13 @@
     // YT.PlayerState: -1 ej startad, 0 avslutad, 1 spelar, 2 pausad, 3 buffrar, 5 köad
     if (event.data === YT.PlayerState.PLAYING) {
       document.getElementById('buffer-overlay').style.display = 'none';
-      // Inget mer behövs här — blurren ligger redan permanent och täcker
-      // titelzonen oavsett om det som spelar är en annons eller trailern.
+      // Återuppta grace-timern om den pausades (t.ex. efter buffring/paus).
+      if (blurState === 'TRAILER_DETECTED') armGrace();
+    } else if (event.data === YT.PlayerState.PAUSED || event.data === YT.PlayerState.BUFFERING) {
+      // Pausa grace-timern så 4-sekundersfönstret bara räknar faktisk
+      // uppspelning — annars kunde blurren slås av medan videon står still
+      // och titelrutan syns.
+      if (blurState === 'TRAILER_DETECTED') pauseGrace();
     }
   }
 
@@ -1087,6 +1144,8 @@
   function scanNext() {
     wantPlay = false;
     stopContentWatch();
+    clearGrace();                 // avbryt ev. pågående grace-timer från förra videon
+    setBlurState('AD');           // återställ tillståndet
     if (ytPlayer) {
       ytPlayer.stopVideo();
     }
@@ -1118,7 +1177,19 @@
     }
   });
 
+  // Pausa grace-timern när appen går i bakgrunden (annars kan den slå av
+  // blurren medan videon står still), återuppta när den kommer fram igen.
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) {
+      if (blurState === 'TRAILER_DETECTED') pauseGrace();
+    } else {
+      if (blurState === 'TRAILER_DETECTED') armGrace();
+    }
+  });
+
   window.addEventListener('beforeunload', stopCamera);
+  // Vyn stängs → avbryt ev. pågående timer så den inte kan slå till senare.
+  window.addEventListener('pagehide', () => { clearGrace(); stopContentWatch(); });
 </script>
 
 </body>
