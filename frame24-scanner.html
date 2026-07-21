@@ -841,24 +841,28 @@
   let currentVideoId = null;
   let ytPlayer = null;
   let ytApiReady = false;
-  let shieldTimer = null;
   let pendingClip = null; // { id, start, end } — satt av playVideo(), konsumeras av revealCard()
 
   function showTitleShield() {
-    const shield = document.getElementById('title-shield');
-    shield.style.display = 'block';
-    if (shieldTimer) clearTimeout(shieldTimer);
-    shieldTimer = setTimeout(() => { shield.style.display = 'none'; }, 5000);
+    // Ingen fast nedräkning längre — blurren ligger kvar som STANDARD tills
+    // contentWatchTick() nedan aktivt bekräftat att det är säkert att ta
+    // bort den (rätt klipp har spelat stabilt en liten stund). Det tar bort
+    // hela kapplöpningen mot exakt bytesögonblicket: istället för att
+    // försöka hinna reagera på bytet i tid, är vi redan täckta INNAN det
+    // händer, och avslöjar bara när vi är säkra.
+    document.getElementById('title-shield').style.display = 'block';
   }
 
   let contentWatchActive = false;
   let contentWatchStartedAt = 0;
   let lastSeenTime = null;
+  let stableSince = null; // tidpunkt då nuvarande klipp senast sågs börja/hoppa
 
   function startContentWatch() {
     contentWatchActive = true;
     contentWatchStartedAt = Date.now();
     lastSeenTime = null;
+    stableSince = Date.now();
     requestAnimationFrame(contentWatchTick);
   }
 
@@ -879,13 +883,27 @@
       // getCurrentTime() speglar den faktiska uppspelningspositionen direkt
       // — till skillnad från video-ID/titel-metadata som visade sig komma
       // med märkbar fördröjning. Ett bakåthopp i tiden (annonsen tar slut,
-      // ETT NYTT klipp — trailern — börjar om från 0) är den snabbaste och
-      // mest tillförlitliga signalen vi har för "nu byter det", oavsett om
-      // ett nytt "PLAYING"-event någonsin skickas eller inte.
+      // ETT NYTT klipp — trailern — börjar om från 0) betyder att ett nytt
+      // klipp just börjat, oavsett om ett nytt "PLAYING"-event skickas.
       if (lastSeenTime !== null && t < lastSeenTime - 0.5) {
         showTitleShield();
+        stableSince = Date.now();
       }
       lastSeenTime = t;
+
+      // Blurren är på som STANDARD. Vi tar bara bort den när det aktuella
+      // klippet setts spela stabilt, framåt, i minst 2 sekunder OCH vi
+      // dessutom bekräftat att video-ID:t matchar kortet — inte förrän dess.
+      // Det gör att vi aldrig behöver hinna reagera exakt i bytesögonblicket
+      // (omöjligt att garantera helt) — vi ligger istället täckta hela
+      // vägen fram tills vi är säkra, och avslöjar först då.
+      if (Date.now() - stableSince > 2000) {
+        let idMatches = false;
+        try { idMatches = ytPlayer.getVideoData().video_id === currentVideoId; } catch (e) {}
+        if (idMatches) {
+          document.getElementById('title-shield').style.display = 'none';
+        }
+      }
     } catch (e) { /* spelaren inte redo just nu, försök igen nästa bildruta */ }
     requestAnimationFrame(contentWatchTick);
   }
