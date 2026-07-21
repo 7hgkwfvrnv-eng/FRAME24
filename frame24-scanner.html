@@ -858,6 +858,91 @@
     document.getElementById('title-shield').style.display = 'none';
   }
 
+  // ---- Bevakning: identifiera när den RIKTIGA trailern spelar, håll sen
+  //      blurren kvar i 4 sekunder till (för att täcka YouTubes titel-list
+  //      som visas i början), och ta först därefter bort den. ----
+  let currentClipStart = 0;
+  let watchActive = false;
+  let wPlayStart = 0;      // när uppspelningen begärdes
+  let wLastT = null;       // föregående avlästa uppspelningsposition
+  let wFirstMax = 0;       // högsta positionen under de första 600 ms
+  let wFirstT = null;      // "startposition" (låst efter 600 ms)
+  let wSawJump = false;    // har vi sett ett bakåthopp (= det fanns en annons)?
+  let wConfirmedAt = null; // när den riktiga trailern bekräftades
+
+  function startContentWatch() {
+    watchActive = true;
+    wPlayStart = Date.now();
+    wLastT = null;
+    wFirstMax = 0;
+    wFirstT = null;
+    wSawJump = false;
+    wConfirmedAt = null;
+    requestAnimationFrame(contentWatchTick);
+  }
+  function stopContentWatch() {
+    watchActive = false;
+  }
+
+  function contentWatchTick() {
+    if (!watchActive) return;
+    if (Date.now() - wPlayStart > 60000) { watchActive = false; return; } // säkerhetstak
+
+    let t = null;
+    try { t = ytPlayer.getCurrentTime(); } catch (e) {}
+
+    if (typeof t === 'number' && isFinite(t)) {
+      const elapsed = Date.now() - wPlayStart;
+
+      // Lås "startpositionen": högsta positionen vi ser under de första
+      // 600 ms. Den RIKTIGA trailern är klippt att börja vid currentClipStart
+      // (t.ex. 20s), så den når snabbt dit. En annons börjar alltid från ~0
+      // och hinner bara till ~0.6s på samma tid. Det skiljer dem åt direkt,
+      // utan den fördröjning som video-ID-metadatan hade.
+      if (elapsed <= 600) {
+        if (t > wFirstMax) wFirstMax = t;
+      } else if (wFirstT === null) {
+        wFirstT = wFirstMax;
+      }
+
+      // Bakåthopp = ett klipp (en annons) tog just slut och ett nytt började.
+      // Blurren ligger redan på (den togs aldrig bort under annonsen), så
+      // detta ger ingen blinkning — vi bara (om)startar 4-sekundersfönstret
+      // vid det nya klippets början.
+      if (wLastT !== null && t < wLastT - 0.5) {
+        wSawJump = true;
+        wConfirmedAt = Date.now();
+        showShield();
+      }
+      wLastT = t;
+
+      // Bekräfta den riktiga trailern (om vi inte redan gjort det via ett hopp):
+      if (wConfirmedAt === null && !wSawJump && wFirstT !== null) {
+        if (currentClipStart >= 5) {
+          // Startpositionen avslöjar direkt om uppspelningen började vid
+          // trailerns klipp-position (ingen annons) eller vid ~0 (annons).
+          if (wFirstT >= currentClipStart - 1.5) {
+            wConfirmedAt = Date.now();       // började vid trailern → ingen annons
+          }
+          // annars: började vid ~0 → annons spelar → vänta på bakåthoppet
+        } else {
+          // Klipp utan meningsfull startsekund — positionen kan inte skilja
+          // annons från trailer. Vänta 6s; en eventuell annons hinner oftast
+          // ta slut (och ge ett bakåthopp) inom den tiden.
+          if (elapsed > 6000) wConfirmedAt = Date.now();
+        }
+      }
+
+      // Ta bort blurren 4 sekunder efter att den riktiga trailern bekräftats.
+      if (wConfirmedAt !== null && Date.now() - wConfirmedAt >= 4000) {
+        hideShield();
+        watchActive = false;
+        return;
+      }
+    }
+    requestAnimationFrame(contentWatchTick);
+  }
+
   window.onYouTubeIframeAPIReady = function () {
     ytApiReady = true;
   };
@@ -923,12 +1008,15 @@
     if (!pendingClip) return;
     const clip = pendingClip;
     currentVideoId = clip.id;
+    currentClipStart = clip.start || 0;
     document.getElementById('tap-to-play').style.display = 'none';
     document.getElementById('title-reveal').textContent = 'Gissa året — vänd sen på kortet för facit';
 
     // Synkront, i samma tryckhändelse: ridåerna öppnas och blurren läggs på
-    // INNAN videon börjar. Blurren är permanent (ligger kvar hela klippet),
-    // så det finns ingen timing att missa — titeln kan aldrig blinka fram.
+    // INNAN videon börjar. Blurren tas INTE bort förrän vi bekräftat att den
+    // riktiga trailern spelar — och då först efter ytterligare 4 sekunder.
+    // Eftersom den ligger kvar oavbrutet genom en eventuell annons fram tills
+    // dess, finns ingen lucka där titeln kan blinka fram.
     openCurtains();
     showShield();
     if (document.getElementById('audioOnlyToggle').checked) {
@@ -955,6 +1043,7 @@
       ytPlayer.setVolume(100);
       ytPlayer.playVideo();
     } catch (e) {}
+    startContentWatch();
   }
 
   function onPlayerStateChange(event) {
@@ -997,6 +1086,7 @@
 
   function scanNext() {
     wantPlay = false;
+    stopContentWatch();
     if (ytPlayer) {
       ytPlayer.stopVideo();
     }
