@@ -283,17 +283,19 @@
   #title-shield {
     position: absolute;
     top: 0; left: 0; right: 0;
-    height: 16%;
-    -webkit-backdrop-filter: blur(14px);
-    backdrop-filter: blur(14px);
-    /* Tunn permanent skyddsremsa (debug): täcker bara titel-/loggzonen högst
-       upp så den aldrig kan läcka medan vi samlar in mätdata. */
+    height: 34%;
+    -webkit-backdrop-filter: blur(16px);
+    backdrop-filter: blur(16px);
+    /* Täcker titel-/loggzonen medan trailern visar sin öppningstitel (de
+       första ~4 s efter identifiering), tonar ut nedåt som en filmisk
+       letterbox-gradient. Tas bort när graceperioden löper ut. */
     background: linear-gradient(to bottom,
-      rgba(6,4,3,0.80) 0%,
-      rgba(6,4,3,0.50) 60%,
+      rgba(6,4,3,0.78) 0%,
+      rgba(6,4,3,0.55) 40%,
+      rgba(6,4,3,0.25) 70%,
       rgba(6,4,3,0) 100%);
-    -webkit-mask-image: linear-gradient(to bottom, black 70%, transparent 100%);
-    mask-image: linear-gradient(to bottom, black 70%, transparent 100%);
+    -webkit-mask-image: linear-gradient(to bottom, black 62%, transparent 100%);
+    mask-image: linear-gradient(to bottom, black 62%, transparent 100%);
     z-index: 6;
     pointer-events: none;
     display: none;
@@ -976,8 +978,8 @@
     logBlur('ny video: AD, blur PÅ');
   }
 
-  // AD → TRAILER_DETECTED. Anropas av den befintliga identifieringssignalen
-  // (se contentWatchTick). Första positiva träffen är definitiv för videon —
+  // AD → TRAILER_DETECTED. Anropas av identifieringssignalen (PLAYING-eventet
+  // i onPlayerStateChange). Första positiva träffen är definitiv för videon —
   // efterföljande träffar ignoreras eftersom vi då inte längre är i AD.
   function onTrailerDetected() {
     if (blurState !== 'AD') return;
@@ -1009,81 +1011,20 @@
     graceTimerId = null;
     if (blurState !== 'TRAILER_DETECTED') return;
     setBlurState('TRAILER_VISIBLE');
-    // DEBUG: dölj INTE remsan — den ligger kvar som skydd under mätningen.
-    // Vi loggar bara var/när detektionen HADE tagit bort den, så jag kan
-    // jämföra mot vad spelaren faktiskt gjorde.
-    logEvent('WOULD_REVEAL (debug: remsan ligger kvar)');
+    hideShield();   // trailern har passerat sin titel-del → visa resten
   }
 
-  // ---- Befintlig identifieringssignal (oförändrad algoritm) ----
-  //  Avgör NÄR videon som spelas är den riktiga trailern och anropar då
-  //  onTrailerDetected(). Detektionen matas in i tillståndsmaskinen ovan.
-  //
-  //  IDENTIFIERINGSPRINCIP: blur ligger kvar tills videon SPELAR FRAMÅT PÅ
-  //  RIKTIGT. getCurrentTime() står stilla (fryst vid klippets startposition)
-  //  under annonser — den ökar bara när den riktiga trailern faktiskt rullar.
-  //  Genom att kräva att positionen avancerar i realtid (~lika mycket som
-  //  väggklockan) skippar vi alla annonser (en, två, fler) och identifierar
-  //  trailern först när den verkligen spelar.
+  // ---- Identifieringssignal ----
+  //  Den riktiga trailern identifieras via YouTube-eventet onStateChange
+  //  === PLAYING (se onPlayerStateChange). Mätdata visar att annonser ligger
+  //  i UNSTARTED/BUFFERING och att ENBART trailern rapporterar PLAYING, så
+  //  ingen pollning behövs. currentClipStart sparas bara för loggningen.
+  //  Fail-safe: inträffar aldrig PLAYING → onTrailerDetected() anropas aldrig
+  //  → blurState stannar i AD → blurren ligger kvar hela videon.
   let currentClipStart = 0;
-  let watchActive = false;
-  let wPlayStart = 0;      // när uppspelningen begärdes
-  let wAnchorClock = 0;    // väggklocka vid senaste ankarpunkt
-  let wAnchorT = null;     // uppspelningsposition vid senaste ankarpunkt
 
-  function startContentWatch() {
-    watchActive = true;
-    wPlayStart = Date.now();
-    wAnchorClock = 0;
-    wAnchorT = null;
-    requestAnimationFrame(contentWatchTick);
-  }
-  function stopContentWatch() {
-    watchActive = false;
-  }
-
-  function contentWatchTick() {
-    if (!watchActive) return;
-    // Sluta leta så fort trailern identifierats — då sköter timern resten.
-    if (blurState !== 'AD') { watchActive = false; return; }
-    // Fail-safe-tak: om identifiering aldrig sker letar vi i högst 3 min och
-    // slutar sen — blurren ligger kvar (state = AD) hela videon.
-    if (Date.now() - wPlayStart > 180000) { watchActive = false; return; }
-
-    let t = null;
-    try { t = ytPlayer.getCurrentTime(); } catch (e) {}
-
-    if (typeof t === 'number' && isFinite(t)) {
-      const now = Date.now();
-
-      // (Om)ankra vid: första sampeln, en bakåtrörelse, eller ett stort
-      // framåthopp (= ett nytt klipp/segment började). Annars mäter vi hur
-      // mycket positionen hunnit avancera sedan ankarpunkten.
-      if (wAnchorT === null || t < wAnchorT - 0.3 || t > wAnchorT + 3.0) {
-        wAnchorClock = now;
-        wAnchorT = t;
-      } else {
-        const wall = now - wAnchorClock;
-        if (wall >= 700) {
-          const advanced = t - wAnchorT;
-          // Riktig trailer: positionen ökar ~lika mycket som väggklockan
-          // (spelar framåt i realtid). Annons: getCurrentTime fryst → ≈ 0.
-          const playingForward = advanced >= 0.55;
-          // För klippta trailers: kräv dessutom att vi är i klippets intervall,
-          // som extra skydd om en annons mot förmodan skulle ha egen löpande tid.
-          const inClip = (currentClipStart < 5) || (t >= currentClipStart - 1.5);
-          if (playingForward && inClip) {
-            onTrailerDetected();   // ← identifieringssignal → tillståndsmaskin
-          } else {
-            // Stod stilla (annons spelar) — ankra om och fortsätt leta.
-            wAnchorClock = now;
-            wAnchorT = t;
-          }
-        }
-      }
-    }
-    requestAnimationFrame(contentWatchTick);
-  }
+  function startContentWatch() { /* ersatt av PLAYING-eventet — behålls som no-op */ }
+  function stopContentWatch() { /* no-op */ }
 
   window.onYouTubeIframeAPIReady = function () {
     ytApiReady = true;
@@ -1191,12 +1132,17 @@
     // YT.PlayerState: -1 ej startad, 0 avslutad, 1 spelar, 2 pausad, 3 buffrar, 5 köad
     if (event.data === YT.PlayerState.PLAYING) {
       document.getElementById('buffer-overlay').style.display = 'none';
+      // IDENTIFIERINGSSIGNAL (bekräftad av mätdata): annonserna rapporterar
+      // UNSTARTED/BUFFERING — ENBART den riktiga trailern rapporterar PLAYING.
+      // Första PLAYING = trailern har börjat. onTrailerDetected() ignorerar
+      // allt utom första träffen, så senare PLAYING (efter buffring mitt i
+      // trailern) startar inte om något.
+      onTrailerDetected();
       // Återuppta grace-timern om den pausades (t.ex. efter buffring/paus).
       if (blurState === 'TRAILER_DETECTED') armGrace();
     } else if (event.data === YT.PlayerState.PAUSED || event.data === YT.PlayerState.BUFFERING) {
       // Pausa grace-timern så 4-sekundersfönstret bara räknar faktisk
-      // uppspelning — annars kunde blurren slås av medan videon står still
-      // och titelrutan syns.
+      // uppspelning (buffring mitt i trailern ska inte räknas).
       if (blurState === 'TRAILER_DETECTED') pauseGrace();
     }
   }
