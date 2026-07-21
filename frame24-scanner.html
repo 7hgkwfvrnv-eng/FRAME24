@@ -851,6 +851,46 @@
     shieldTimer = setTimeout(() => { shield.style.display = 'none'; }, 5000);
   }
 
+  let contentWatchActive = false;
+  let contentWatchStartedAt = 0;
+  let lastSeenTime = null;
+
+  function startContentWatch() {
+    contentWatchActive = true;
+    contentWatchStartedAt = Date.now();
+    lastSeenTime = null;
+    requestAnimationFrame(contentWatchTick);
+  }
+
+  function stopContentWatch() {
+    contentWatchActive = false;
+  }
+
+  function contentWatchTick() {
+    if (!contentWatchActive) return;
+    // Säkerhetsgräns — sluta bevaka efter 45s (längre annonser än så är
+    // extremt ovanliga, och vi vill inte pollra i onödan hela klippet ut).
+    if (Date.now() - contentWatchStartedAt > 45000) {
+      contentWatchActive = false;
+      return;
+    }
+    try {
+      const t = ytPlayer.getCurrentTime();
+      // getCurrentTime() speglar den faktiska uppspelningspositionen direkt
+      // — till skillnad från video-ID/titel-metadata som visade sig komma
+      // med märkbar fördröjning. Ett bakåthopp i tiden (annonsen tar slut,
+      // ETT NYTT klipp — trailern — börjar om från 0) är den snabbaste och
+      // mest tillförlitliga signalen vi har för "nu byter det", oavsett om
+      // ett nytt "PLAYING"-event någonsin skickas eller inte.
+      if (lastSeenTime !== null && t < lastSeenTime - 0.5) {
+        showTitleShield();
+      }
+      lastSeenTime = t;
+    } catch (e) { /* spelaren inte redo just nu, försök igen nästa bildruta */ }
+    requestAnimationFrame(contentWatchTick);
+  }
+
+
   window.onYouTubeIframeAPIReady = function () {
     ytApiReady = true;
   };
@@ -888,6 +928,7 @@
     //    vilket både Chrome och Safari tillåter.
     openCurtains();
     showTitleShield();
+    startContentWatch();
     document.getElementById('buffer-overlay').style.display = ytPlayer ? 'none' : 'flex';
 
     const playerVars = {
@@ -981,6 +1022,7 @@
   }
 
   function scanNext() {
+    stopContentWatch();
     if (ytPlayer) {
       ytPlayer.stopVideo();
     }
