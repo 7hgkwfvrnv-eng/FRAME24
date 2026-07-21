@@ -927,23 +927,25 @@
 
   // ---- Befintlig identifieringssignal (oförändrad algoritm) ----
   //  Avgör NÄR videon som spelas är den riktiga trailern och anropar då
-  //  onTrailerDetected(). Detektionen byggs inte om — dess utslag matas bara
-  //  in i tillståndsmaskinen ovan.
+  //  onTrailerDetected(). Detektionen matas in i tillståndsmaskinen ovan.
+  //
+  //  IDENTIFIERINGSPRINCIP: blur ligger kvar tills videon SPELAR FRAMÅT PÅ
+  //  RIKTIGT. getCurrentTime() står stilla (fryst vid klippets startposition)
+  //  under annonser — den ökar bara när den riktiga trailern faktiskt rullar.
+  //  Genom att kräva att positionen avancerar i realtid (~lika mycket som
+  //  väggklockan) skippar vi alla annonser (en, två, fler) och identifierar
+  //  trailern först när den verkligen spelar.
   let currentClipStart = 0;
   let watchActive = false;
   let wPlayStart = 0;      // när uppspelningen begärdes
-  let wLastT = null;       // föregående avlästa uppspelningsposition
-  let wFirstMax = 0;       // högsta positionen under de första 600 ms
-  let wFirstT = null;      // "startposition" (låst efter 600 ms)
-  let wSawJump = false;    // har vi sett ett bakåthopp (= det fanns en annons)?
+  let wAnchorClock = 0;    // väggklocka vid senaste ankarpunkt
+  let wAnchorT = null;     // uppspelningsposition vid senaste ankarpunkt
 
   function startContentWatch() {
     watchActive = true;
     wPlayStart = Date.now();
-    wLastT = null;
-    wFirstMax = 0;
-    wFirstT = null;
-    wSawJump = false;
+    wAnchorClock = 0;
+    wAnchorT = null;
     requestAnimationFrame(contentWatchTick);
   }
   function stopContentWatch() {
@@ -962,35 +964,31 @@
     try { t = ytPlayer.getCurrentTime(); } catch (e) {}
 
     if (typeof t === 'number' && isFinite(t)) {
-      const elapsed = Date.now() - wPlayStart;
+      const now = Date.now();
 
-      // Lås "startpositionen": högsta positionen under de första 600 ms.
-      // Den RIKTIGA trailern är klippt att börja vid currentClipStart (t.ex.
-      // 20s) och når snabbt dit; en annons börjar vid ~0 och hinner bara till
-      // ~0.6s på samma tid. Det skiljer dem åt direkt.
-      if (elapsed <= 600) {
-        if (t > wFirstMax) wFirstMax = t;
-      } else if (wFirstT === null) {
-        wFirstT = wFirstMax;
-      }
-
-      // Bakåthopp = annons slut, nytt klipp började → identifieringssignal.
-      if (wLastT !== null && t < wLastT - 0.5) {
-        wSawJump = true;
-        onTrailerDetected();
-      }
-      wLastT = t;
-
-      // Positionsbaserad identifiering (ingen annons: trailern börjar direkt
-      // vid sin klipp-position).
-      if (!wSawJump && wFirstT !== null) {
-        if (currentClipStart >= 5) {
-          if (wFirstT >= currentClipStart - 1.5) onTrailerDetected();
-        } else {
-          // Klipp utan meningsfull startsekund — positionen kan inte skilja
-          // annons från trailer. Vänta 6s; en eventuell annons hinner oftast
-          // ta slut (ge ett bakåthopp) inom den tiden.
-          if (elapsed > 6000) onTrailerDetected();
+      // (Om)ankra vid: första sampeln, en bakåtrörelse, eller ett stort
+      // framåthopp (= ett nytt klipp/segment började). Annars mäter vi hur
+      // mycket positionen hunnit avancera sedan ankarpunkten.
+      if (wAnchorT === null || t < wAnchorT - 0.3 || t > wAnchorT + 3.0) {
+        wAnchorClock = now;
+        wAnchorT = t;
+      } else {
+        const wall = now - wAnchorClock;
+        if (wall >= 700) {
+          const advanced = t - wAnchorT;
+          // Riktig trailer: positionen ökar ~lika mycket som väggklockan
+          // (spelar framåt i realtid). Annons: getCurrentTime fryst → ≈ 0.
+          const playingForward = advanced >= 0.55;
+          // För klippta trailers: kräv dessutom att vi är i klippets intervall,
+          // som extra skydd om en annons mot förmodan skulle ha egen löpande tid.
+          const inClip = (currentClipStart < 5) || (t >= currentClipStart - 1.5);
+          if (playingForward && inClip) {
+            onTrailerDetected();   // ← identifieringssignal → tillståndsmaskin
+          } else {
+            // Stod stilla (annons spelar) — ankra om och fortsätt leta.
+            wAnchorClock = now;
+            wAnchorT = t;
+          }
         }
       }
     }
