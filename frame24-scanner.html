@@ -283,12 +283,18 @@
   #title-shield {
     position: absolute;
     top: 0; left: 0; right: 0;
-    height: 55%;
-    -webkit-backdrop-filter: blur(10px);
-    backdrop-filter: blur(10px);
-    background: rgba(10,10,10,0.05);
-    -webkit-mask-image: linear-gradient(to bottom, black 65%, transparent 100%);
-    mask-image: linear-gradient(to bottom, black 65%, transparent 100%);
+    height: 42%;
+    -webkit-backdrop-filter: blur(16px);
+    backdrop-filter: blur(16px);
+    /* Mörk toning ovanpå oskärpan — dubbel säkerhet att titeltext aldrig
+       går att läsa. Läser samtidigt som en filmisk letterbox-gradient. */
+    background: linear-gradient(to bottom,
+      rgba(6,4,3,0.72) 0%,
+      rgba(6,4,3,0.55) 35%,
+      rgba(6,4,3,0.28) 65%,
+      rgba(6,4,3,0) 100%);
+    -webkit-mask-image: linear-gradient(to bottom, black 60%, transparent 100%);
+    mask-image: linear-gradient(to bottom, black 60%, transparent 100%);
     z-index: 6;
     pointer-events: none;
     display: none;
@@ -841,87 +847,31 @@
   let currentVideoId = null;
   let ytPlayer = null;
   let ytApiReady = false;
-  let pendingClip = null; // { id, start, end } — satt av playVideo(), konsumeras av revealCard()
+  let playerReady = false;
+  let pendingClip = null;   // { id, start, end } — satt av playVideo(), konsumeras av revealCard()
+  let wantPlay = false;     // satt om tryckningen sker innan spelaren hunnit bli redo
 
-  function showTitleShield() {
-    // Ingen fast nedräkning längre — blurren ligger kvar som STANDARD tills
-    // contentWatchTick() nedan aktivt bekräftat att det är säkert att ta
-    // bort den (rätt klipp har spelat stabilt en liten stund). Det tar bort
-    // hela kapplöpningen mot exakt bytesögonblicket: istället för att
-    // försöka hinna reagera på bytet i tid, är vi redan täckta INNAN det
-    // händer, och avslöjar bara när vi är säkra.
+  function showShield() {
     document.getElementById('title-shield').style.display = 'block';
   }
-
-  let contentWatchActive = false;
-  let contentWatchStartedAt = 0;
-  let lastSeenTime = null;
-  let stableSince = null; // tidpunkt då nuvarande klipp senast sågs börja/hoppa
-
-  function startContentWatch() {
-    contentWatchActive = true;
-    contentWatchStartedAt = Date.now();
-    lastSeenTime = null;
-    stableSince = Date.now();
-    requestAnimationFrame(contentWatchTick);
+  function hideShield() {
+    document.getElementById('title-shield').style.display = 'none';
   }
-
-  function stopContentWatch() {
-    contentWatchActive = false;
-  }
-
-  function contentWatchTick() {
-    if (!contentWatchActive) return;
-    // Säkerhetsgräns — sluta bevaka efter 45s (längre annonser än så är
-    // extremt ovanliga, och vi vill inte pollra i onödan hela klippet ut).
-    if (Date.now() - contentWatchStartedAt > 45000) {
-      contentWatchActive = false;
-      return;
-    }
-    try {
-      const t = ytPlayer.getCurrentTime();
-      // getCurrentTime() speglar den faktiska uppspelningspositionen direkt
-      // — till skillnad från video-ID/titel-metadata som visade sig komma
-      // med märkbar fördröjning. Ett bakåthopp i tiden (annonsen tar slut,
-      // ETT NYTT klipp — trailern — börjar om från 0) betyder att ett nytt
-      // klipp just börjat, oavsett om ett nytt "PLAYING"-event skickas.
-      if (lastSeenTime !== null && t < lastSeenTime - 0.5) {
-        showTitleShield();
-        stableSince = Date.now();
-      }
-      lastSeenTime = t;
-
-      // Blurren är på som STANDARD. Vi tar bara bort den när det aktuella
-      // klippet setts spela stabilt, framåt, i minst 2 sekunder OCH vi
-      // dessutom bekräftat att video-ID:t matchar kortet — inte förrän dess.
-      // Det gör att vi aldrig behöver hinna reagera exakt i bytesögonblicket
-      // (omöjligt att garantera helt) — vi ligger istället täckta hela
-      // vägen fram tills vi är säkra, och avslöjar först då.
-      if (Date.now() - stableSince > 2000) {
-        let idMatches = false;
-        try { idMatches = ytPlayer.getVideoData().video_id === currentVideoId; } catch (e) {}
-        if (idMatches) {
-          document.getElementById('title-shield').style.display = 'none';
-        }
-      }
-    } catch (e) { /* spelaren inte redo just nu, försök igen nästa bildruta */ }
-    requestAnimationFrame(contentWatchTick);
-  }
-
 
   window.onYouTubeIframeAPIReady = function () {
     ytApiReady = true;
   };
 
   function playVideo(id, start, end) {
-    // Kortet är scannat — men vi laddar INTE videon än. Vi väntar på en
-    // medveten tryckning (revealCard) så att play-med-ljud sker som en
-    // direkt, synkron följd av en klickhändelse. Det är det enda sättet
-    // webbläsare (särskilt Safari) tillförlitligt tillåter ljud, OCH det
-    // enda sättet vi kan garantera att blurren ligger på plats innan en
-    // enda bildruta hinner visas.
+    // Kortet är scannat. Vi FÖRLADDAR videon direkt (köad, men spelar inte
+    // än) så att spelaren hinner bli helt redo medan spelaren sträcker sig
+    // efter "Visa filmen"-knappen. Då kan själva uppspelningen sen ske
+    // synkront i tryckningen (revealCard) — vilket är avgörande för att
+    // a) webbläsaren ska tillåta ljud, och b) YouTubes EGEN play-knapp
+    // aldrig ska dyka upp (den gör det annars när uppspelningen försöker
+    // starta asynkront utanför tryckögonblicket).
     pendingClip = { id: id, start: start, end: end };
-    document.getElementById('title-shield').style.display = 'none';
+    hideShield();
     document.getElementById('scan-view').style.display = 'none';
     document.getElementById('player-box').style.display = 'block';
     document.getElementById('title-reveal').textContent = '';
@@ -929,28 +879,9 @@
     document.getElementById('audio-overlay').style.display = 'none';
     document.getElementById('buffer-overlay').style.display = 'none';
     document.getElementById('tap-to-play').style.display = 'flex';
-  }
-
-  function revealCard() {
-    if (!pendingClip) return;
-    const clip = pendingClip;
-    currentVideoId = clip.id;
-    document.getElementById('tap-to-play').style.display = 'none';
-    document.getElementById('title-reveal').textContent = 'Gissa året — vänd sen på kortet för facit';
-
-    // ALLT nedan sker synkront, i samma klickhändelse:
-    // 1) Ridåerna öppnas och blurren läggs på DIREKT — innan videon ens
-    //    hunnit be webbläsaren om en bildruta. Ingen risk att titeln
-    //    hinner synas.
-    // 2) Uppspelning med ljud begärs som en direkt följd av tryckningen,
-    //    vilket både Chrome och Safari tillåter.
-    openCurtains();
-    showTitleShield();
-    startContentWatch();
-    document.getElementById('buffer-overlay').style.display = ytPlayer ? 'none' : 'flex';
 
     const playerVars = {
-      autoplay: 1,
+      autoplay: 0,          // köa, spela inte — uppspelning sker vid tryck
       mute: 0,
       controls: 0,
       modestbranding: 1,
@@ -960,55 +891,80 @@
       playsinline: 1,
       disablekb: 1
     };
-    if (clip.start) playerVars.start = clip.start;
-    if (clip.end) playerVars.end = clip.end;
+    if (start) playerVars.start = start;
+    if (end) playerVars.end = end;
 
-    if (ytPlayer) {
-      const loadOpts = { videoId: clip.id };
-      if (clip.start) loadOpts.startSeconds = clip.start;
-      if (clip.end) loadOpts.endSeconds = clip.end;
-      ytPlayer.loadVideoById(loadOpts);
-      ytPlayer.playVideo();
-    } else if (ytApiReady && typeof YT !== 'undefined') {
+    if (ytPlayer && playerReady) {
+      // Återanvänd befintlig spelare — köa nästa klipp tyst i bakgrunden.
+      const opts = { videoId: id };
+      if (start) opts.startSeconds = start;
+      if (end) opts.endSeconds = end;
+      ytPlayer.cueVideoById(opts);
+    } else if (!ytPlayer && ytApiReady && typeof YT !== 'undefined') {
+      // Första kortet — skapa spelaren nu så onReady hinner köras före trycket.
       ytPlayer = new YT.Player('yt-player', {
-        videoId: clip.id,
+        videoId: id,
         playerVars: playerVars,
         events: {
-          onReady: function (event) {
-            document.getElementById('buffer-overlay').style.display = 'none';
-            event.target.playVideo();
+          onReady: function () {
+            playerReady = true;
+            if (wantPlay) startPlaybackNow(); // trycket kom före redo — spela nu
           },
           onStateChange: onPlayerStateChange
         }
       });
-    } else {
-      // API:et hann inte ladda klart — mycket ovanligt, men försök igen
-      setTimeout(revealCard, 300);
+    } else if (!ytApiReady) {
+      // YouTube-API:et inte klart ännu — försök igen strax.
+      setTimeout(() => playVideo(id, start, end), 200);
     }
+  }
 
+  function revealCard() {
+    if (!pendingClip) return;
+    const clip = pendingClip;
+    currentVideoId = clip.id;
+    document.getElementById('tap-to-play').style.display = 'none';
+    document.getElementById('title-reveal').textContent = 'Gissa året — vänd sen på kortet för facit';
+
+    // Synkront, i samma tryckhändelse: ridåerna öppnas och blurren läggs på
+    // INNAN videon börjar. Blurren är permanent (ligger kvar hela klippet),
+    // så det finns ingen timing att missa — titeln kan aldrig blinka fram.
+    openCurtains();
+    showShield();
     if (document.getElementById('audioOnlyToggle').checked) {
       document.getElementById('audio-overlay').style.display = 'flex';
     }
+
+    if (playerReady) {
+      startPlaybackNow();
+    } else {
+      // Spelaren hann inte bli redo — spela så fort onReady körs.
+      wantPlay = true;
+      document.getElementById('buffer-overlay').style.display = 'flex';
+    }
+  }
+
+  function startPlaybackNow() {
+    // Anropas synkront från tryckningen (eller från onReady om trycket kom
+    // först). playVideo() här är en direkt följd av användargesten → ljud
+    // tillåts, och ingen inbyggd YouTube-play-knapp behövs.
+    wantPlay = false;
+    document.getElementById('buffer-overlay').style.display = 'none';
+    try {
+      ytPlayer.unMute();
+      ytPlayer.setVolume(100);
+      ytPlayer.playVideo();
+    } catch (e) {}
   }
 
   function onPlayerStateChange(event) {
     // YT.PlayerState: -1 ej startad, 0 avslutad, 1 spelar, 2 pausad, 3 buffrar, 5 köad
     if (event.data === YT.PlayerState.PLAYING) {
       document.getElementById('buffer-overlay').style.display = 'none';
-      // Lägger på blurren DIREKT och synkront, varje gång spelaren går till
-      // "spelar" — inte bara en gång. Det täcker både "raka spåret" (ingen
-      // annons, redan täckt av revealCard()) och övergången annons→trailer.
-      // Att vänta och först KOLLA vilket video-ID som faktiskt spelar
-      // (vilket vi testade) var för långsamt — YouTubes egen metadata
-      // uppdateras med märkbar fördröjning efter en annons, vilket gav en
-      // lucka där titeln hann synas. Att blurra blint på varje övergång är
-      // den enda metod som är lika snabb som tryckningen själv. Blurren är
-      // dessutom bara en halvgenomskinlig remsa högst upp — den döljer
-      // aldrig annonsen i sig eller dess "Hoppa över"-knapp.
-      showTitleShield();
+      // Inget mer behövs här — blurren ligger redan permanent och täcker
+      // titelzonen oavsett om det som spelar är en annons eller trailern.
     }
   }
-
 
   function toggleCastInfo() {
     const info = document.getElementById('cast-info');
@@ -1040,7 +996,7 @@
   }
 
   function scanNext() {
-    stopContentWatch();
+    wantPlay = false;
     if (ytPlayer) {
       ytPlayer.stopVideo();
     }
@@ -1051,7 +1007,7 @@
     document.getElementById('buffer-overlay').style.display = 'none';
     document.getElementById('tap-to-play').style.display = 'none';
     document.getElementById('audio-overlay').style.display = 'none';
-    document.getElementById('title-shield').style.display = 'none';
+    hideShield();
     currentVideoId = null;
     pendingClip = null;
     document.getElementById('scan-view').style.display = 'block';
